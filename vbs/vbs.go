@@ -489,6 +489,22 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 		return
 	}
 
+	elemKind := v.Type().Elem().Kind()
+	if elemKind == reflect.Uint8 {
+		var buf []byte
+		if v.Kind() == reflect.Slice {
+			buf = v.Interface().([]byte)
+		} else {
+			n := v.Len()
+			buf = make([]byte, n)
+			for i := 0; i < n; i++ {
+				buf[i] = byte(v.Index(i).Uint())
+			}
+		}
+		enc.encodeBlob(buf)
+		return
+	}
+
 	enc.depth++
 	if enc.depth > enc.maxDepth {
 		enc.err = &DepthOverflowError{enc.maxDepth}
@@ -1135,6 +1151,28 @@ func (dec *Decoder) decodeStringValue(v reflect.Value) {
 	}
 }
 
+func (dec *Decoder) unpackByteArray() []byte {
+	head := dec.unpackHeadKind(VBS_BLOB, true)
+	if dec.err == nil {
+		buf := dec.getBytes(head.num)
+		if dec.err == nil {
+			return buf
+		}
+	}
+	return []byte{}
+}
+
+func (dec *Decoder) unpackByteSlice() []byte {
+	head := dec.unpackHeadKind(VBS_BLOB, true)
+	if dec.err == nil {
+		buf := dec.takeBytes(head.num)
+		if dec.err == nil {
+			return buf
+		}
+	}
+	return []byte{}
+}
+
 func (dec *Decoder) decodeBoolValue(v reflect.Value) {
 	head := dec.unpackHeadKind(VBS_BOOL, true)
 	if dec.err == nil {
@@ -1182,6 +1220,20 @@ func (dec *Decoder) decodeComplexValue(v reflect.Value) {
 }
 
 func (dec *Decoder) decodeArrayValue(v reflect.Value) {
+	if v.Type().Elem().Kind() == reflect.Uint8 {
+		buf := dec.unpackByteArray()
+		if dec.err == nil {
+			if len(buf) > v.Len() {
+				dec.err = &ArrayOverflowError{v.Len()}
+			} else {
+				for i := 0; i < len(buf); i++ {
+					v.Index(i).SetUint(uint64(buf[i]))
+				}
+			}
+		}
+		return
+	}
+
 	dec.unpackHeadOfList()
 	for i := 0; dec.err == nil; i++ {
 		if dec.unpackIfTail() {
@@ -1198,6 +1250,14 @@ func (dec *Decoder) decodeArrayValue(v reflect.Value) {
 }
 
 func (dec *Decoder) decodeSliceValue(v reflect.Value) {
+	if v.Type().Elem().Kind() == reflect.Uint8 {
+		buf := dec.unpackByteSlice()
+		if dec.err == nil {
+			v.SetBytes(buf)
+		}
+		return
+	}
+
 	dec.unpackHeadOfList()
 	for i := 0; dec.err == nil; i++ {
 		if dec.unpackIfTail() {
