@@ -13,6 +13,8 @@ func testMarshal(t *testing.T, u interface{}) {
 		t.Fatalf("error encoding %T: %v:", u, err)
 	}
 
+	fmt.Printf("Marshal %T\t\t%v\n", u, len(got))
+
 	pv := reflect.New(reflect.TypeOf(u))
 	err = Unmarshal(got, pv.Interface())
 	if err != nil {
@@ -64,10 +66,10 @@ func TestMarshalBlob(t *testing.T) {
 }
 
 func TestMarshalSlice(t *testing.T) {
-	u1 := [][3]byte{[3]byte{1,2,3}, [3]byte{4,5,6}, [3]byte{7,8,9}}
+	u1 := [][3]float64{[3]float64{0.1,0.2,0.3}, [3]float64{0.4,0.5,0.6}, [3]float64{0.7,0.8,0.9}}
 	testMarshal(t, u1)
 
-	u2 := [3][]byte{[]byte{1,2,3}, []byte{4,5,6}, []byte{7,8,9}}
+	u2 := [3][]float64{[]float64{0.1,0.2,0.3}, []float64{0.4,0.5,0.6}, []float64{0.7,0.8,0.9}}
 	testMarshal(t, u2)
 
 	u3 := []int{} 	// empty 
