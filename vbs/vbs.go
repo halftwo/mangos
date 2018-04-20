@@ -385,13 +385,6 @@ type Encoder struct {
 	err error
 }
 
-// Encode writes the VBS encoding of v to the stream
-func Encode(w io.Writer, v interface{}) error {
-	enc := NewEncoder(w)
-	enc.Encode(v)
-	return enc.err
-}
-
 // NewEncoder returns a new Encoder that writes to w
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{w:w, maxDepth:math.MaxInt32}
@@ -490,7 +483,7 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 	}
 
 	elemKind := v.Type().Elem().Kind()
-	if elemKind == reflect.Uint8 {
+	if elemKind == reflect.Uint8 {	// VBS_BLOB
 		var buf []byte
 		if v.Kind() == reflect.Slice {
 			buf = v.Interface().([]byte)
@@ -674,13 +667,6 @@ type Decoder struct {
 // If v is nil or not a pointer, Unmarshal returns an InvalidUnmarshalError.
 func Unmarshal(buf []byte, v interface{}) error {
 	dec := NewDecoderBytes(buf)
-	dec.Decode(v)
-	return dec.err
-}
-
-// Decode reads the next VBS-encoded value from input streawm r and stores it in the value pointed to by v.
-func Decode(r io.Reader, v interface{}) error {
-	dec := NewDecoder(r)
 	dec.Decode(v)
 	return dec.err
 }
@@ -1109,13 +1095,12 @@ func (dec *Decoder) unpackIfTail() bool {
 	return false
 }
 
-
 type MismatchedKindError struct {
 	Expect, Got Kind
 }
 
 func (e *MismatchedKindError) Error() string {
-        return fmt.Sprintf("vbs: mismatched kind: expect %s, got %s" + e.Expect.String(), e.Got.String())
+        return fmt.Sprintf("vbs: mismatched kind: expect %s, got %s", e.Expect.String(), e.Got.String())
 }
 
 type BadDataError struct {
@@ -1250,7 +1235,7 @@ func (dec *Decoder) decodeArrayValue(v reflect.Value) {
 }
 
 func (dec *Decoder) decodeSliceValue(v reflect.Value) {
-	if v.Type().Elem().Kind() == reflect.Uint8 {
+	if v.Type().Elem().Kind() == reflect.Uint8 {	// VBS_BLOB
 		buf := dec.unpackByteSlice()
 		if dec.err == nil {
 			v.SetBytes(buf)
@@ -1258,9 +1243,22 @@ func (dec *Decoder) decodeSliceValue(v reflect.Value) {
 		return
 	}
 
-	dec.unpackHeadOfList()
+	head := dec.unpackHeadOfList()
+	if dec.err != nil {
+		if head.kind == VBS_NULL {
+			dec.err = nil
+			if !v.IsNil() {
+				v.Set(reflect.Zero(v.Type()))
+			}
+		}
+		return
+	}
+
 	for i := 0; dec.err == nil; i++ {
 		if dec.unpackIfTail() {
+			if i == 0 && v.IsNil() {
+				v.Set(reflect.MakeSlice(v.Type(), 0, 0))
+			}
 			break
 		}
 
@@ -1282,8 +1280,21 @@ func (dec *Decoder) decodeSliceValue(v reflect.Value) {
 }
 
 func (dec *Decoder) decodeMapValue(v reflect.Value) {
-	dec.unpackHeadOfDict()
+	head := dec.unpackHeadOfDict()
+	if dec.err != nil {
+		if head.kind == VBS_NULL {
+			dec.err = nil
+			if !v.IsNil() {
+				v.Set(reflect.Zero(v.Type()))
+			}
+		}
+		return
+	}
+
 	tp := v.Type()
+	if v.IsNil() {
+		v.Set(reflect.MakeMap(tp))
+	}
 	keyType := tp.Key()
 	elemType := tp.Elem()
 	for dec.err == nil {

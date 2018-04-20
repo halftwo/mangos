@@ -7,128 +7,102 @@ import (
 	"fmt"
 )
 
-func TestMarshalFloat(t *testing.T) {
-	u := -1.25
+func testMarshal(t *testing.T, u interface{}) {
 	got, err := Marshal(u)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("error encoding %T: %v:", u, err)
 	}
 
-	var v float64
-	err = Unmarshal(got, &v)
+	pv := reflect.New(reflect.TypeOf(u))
+	err = Unmarshal(got, pv.Interface())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("error decoding %T: %v:", u, err)
 	}
 
-	if u != v {
-		t.Fatalf("The unmarshaled float (%v) does not match the marshaled data (%v)", u, v)
+	v := pv.Elem().Interface()
+	if !reflect.DeepEqual(u, v) {
+		fmt.Println(u)
+		fmt.Println(v)
+		t.Fatal("The unmarshaled data does not match the original")
 	}
 }
 
-func BenchmarkFloat(b *testing.B) {
-	u := -0.1
-	var v float64
+func benchmark(b *testing.B, u interface{}) {
 	buf := &bytes.Buffer{}
+	enc := NewEncoder(buf)
+	dec := NewDecoder(buf)
+
+	pv := reflect.New(reflect.TypeOf(u))
+	pi := pv.Interface()
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
-		Encode(buf, u)
-		Decode(buf, &v)
+		enc.Encode(u)
+		dec.Decode(pi)
 	}
 
-	if u != v {
-		b.Fatalf("The unmarshaled float (%v) does not match the marshaled data (%v)", u, v)
+	v := pv.Elem().Interface()
+	if !reflect.DeepEqual(u, v) {
+		fmt.Println(u)
+		fmt.Println(v)
+		b.Fatalf("The unmarshaled data does not match the original")
 	}
+}
+
+func TestMarshalFloat(t *testing.T) {
+	var u float64 = -1.25
+	testMarshal(t, u)
+}
+
+func BenchmarkFloat(b *testing.B) {
+	var u float64 = -0.1
+	benchmark(b, u)
 }
 
 func TestMarshalBlob(t *testing.T) {
 	u := [6]byte{1,2,3,4,5,6}
-	v := [6]byte{}
-
-	got, err := Marshal(u)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = Unmarshal(got, &v)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	fmt.Println(got)
-
-	if !reflect.DeepEqual(u, v) {
-		t.Fatal("The unmarshaled blob does not match the original")
-	}
+	testMarshal(t, u)
 }
 
 func TestMarshalSlice(t *testing.T) {
-	u := [][]byte{[]byte{1,2,3}, []byte{4,5,6}, []byte{7,8,9}}
-	got, err := Marshal(u)
-	if err != nil {
-		t.Fatal(err)
-	}
+	u1 := [][3]byte{[3]byte{1,2,3}, [3]byte{4,5,6}, [3]byte{7,8,9}}
+	testMarshal(t, u1)
 
-	v := [][]byte{}
-	err = Unmarshal(got, &v)
-	if err != nil {
-		t.Fatal(err)
-	}
+	u2 := [3][]byte{[]byte{1,2,3}, []byte{4,5,6}, []byte{7,8,9}}
+	testMarshal(t, u2)
 
-	if !reflect.DeepEqual(u, v) {
-		fmt.Println(u)
-		fmt.Println(v)
-		t.Fatal("The unmarshaled slice does not match the original")
-	}
+	u3 := []int{} 	// empty 
+	testMarshal(t, u3)
+
+	var u4 []int	// nil 
+	testMarshal(t, u4)
 }
 
-func BenchmarkSlice(b *testing.B) {
+func BenchmarkSliceBytes(b *testing.B) {
+	u := [...][]byte{[]byte{1,2,3,4,5}, []byte{4,5,6,7,8}, []byte{7,8,9,10,11}}
+	benchmark(b, u)
+}
+
+func BenchmarkSliceString(b *testing.B) {
 	u := []string{"hello", "world", "faint"}
-	v := []string{}
-
-	buf := &bytes.Buffer{}
-	for i := 0; i < b.N; i++ {
-		buf.Reset()
-		Encode(buf, u)
-		Decode(buf, &v)
-	}
-
-	if !reflect.DeepEqual(u, v) {
-		b.Fatal("The unmarshaled slice does not match the original")
-	}
+	benchmark(b, u)
 }
 
 func TestMarshalMap(t *testing.T) {
-	u := map[int]string{1:"hello", 3:"world"}
-	u[-1] = "faint"
-	got, err := Marshal(u)
-	if err != nil {
-		t.Fatal(err)
-	}
+	u1 := map[int]string{1:"hello", 3:"world", -1:"faint"}
+	testMarshal(t, u1)
 
-	v := map[int]string{}
-	err = Unmarshal(got, &v)
-	if err != nil {
-		t.Fatal(err)
-	}
+	u2 := map[string]int{"hello":1, "world":3, "faint":-1}
+	testMarshal(t, u2)
 
-	if !reflect.DeepEqual(u, v) {
-		t.Fatal("The unmarshaled map does not match the original")
-	}
+	u3 := map[int]string{}	// empty 
+	testMarshal(t, u3)
+
+	var u4 map[int]string	// nil 
+	testMarshal(t, u4)
 }
 
 func BenchmarkMap(b *testing.B) {
 	u := map[int]string{1:"hello", 3:"world", -1:"faint"}
-	v := map[int]string{}
-
-	buf := &bytes.Buffer{}
-	for i := 0; i < b.N; i++ {
-		buf.Reset()
-		Encode(buf, u)
-		Decode(buf, &v)
-	}
-
-	if !reflect.DeepEqual(u, v) {
-		b.Fatal("The unmarshaled map does not match the original")
-	}
+	benchmark(b, u)
 }
 
