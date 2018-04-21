@@ -470,13 +470,21 @@ func (dec *Decoder) decodeUintValue(v reflect.Value) {
 	}
 }
 
-func (dec *Decoder) decodeStringValue(v reflect.Value) {
+func (dec *Decoder) unpackString() string {
 	head := dec.unpackHeadKind(VBS_STRING, true)
 	if dec.err == nil {
 		buf := dec.getBytes(head.num)
 		if dec.err == nil {
-			v.SetString(string(buf))
+			return string(buf)
 		}
+	}
+	return ""
+}
+
+func (dec *Decoder) decodeStringValue(v reflect.Value) {
+	s := dec.unpackString()
+	if dec.err == nil {
+		v.SetString(s)
 	}
 }
 
@@ -590,10 +598,8 @@ func (dec *Decoder) decodeSliceValue(v reflect.Value) {
 	head := dec.unpackHeadOfList()
 	if dec.err != nil {
 		if head.kind == VBS_NULL {
+			// No error, leave the v alone
 			dec.err = nil
-			if !v.IsNil() {
-				v.Set(reflect.Zero(v.Type()))
-			}
 		}
 		return
 	}
@@ -627,10 +633,8 @@ func (dec *Decoder) decodeMapValue(v reflect.Value) {
 	head := dec.unpackHeadOfDict()
 	if dec.err != nil {
 		if head.kind == VBS_NULL {
+			// No error, leave the v alone
 			dec.err = nil
-			if !v.IsNil() {
-				v.Set(reflect.Zero(v.Type()))
-			}
 		}
 		return
 	}
@@ -666,11 +670,33 @@ func (dec *Decoder) decodeMapValue(v reflect.Value) {
 
 func (dec *Decoder) decodeStructValue(v reflect.Value) {
 	dec.unpackHeadOfDict()
+	fields := cachedTypeFields(v.Type())
+
 	for dec.err == nil {
 		if dec.unpackIfTail() {
 			break
 		}
+
+		name := dec.unpackString()
+		if dec.err != nil {
+			break
+		}
+
+		var vf *vbsField
+		for i := range fields {
+			f := &fields[i]
+			if f.name == name {
+				vf = f
+			}
+		}
+
+		if vf == nil {
+			continue
+		}
+
+		dec.decodeReflectValue(v.Field(vf.index))
 		// TODO
 	}
 }
+
 

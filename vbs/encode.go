@@ -168,6 +168,57 @@ func (enc *Encoder) encodeDescriptor(descriptor uint16) {
 	enc.write(enc.bufPacker[0:n])
 }
 
+func (enc *Encoder) encodeReflectValue(v reflect.Value) {
+	if enc.err != nil {
+		return
+	}
+
+	if d, ok := v.Interface().(Decimal64); ok {
+		enc.encodeDecimal64(d)
+		return
+	} 
+
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		enc.encodeInteger(v.Int())
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		enc.encodeInteger(int64(v.Uint()))
+
+	case reflect.String:
+		enc.encodeString(v.String())
+
+	case reflect.Bool:
+		enc.encodeBool(v.Bool())
+
+	case reflect.Float32, reflect.Float64:
+		enc.encodeFloat(v.Float())
+
+	case reflect.Complex64, reflect.Complex128:
+		enc.encodeComplex(v.Complex())
+
+	case reflect.Array, reflect.Slice:
+		enc.encodeList(v)
+
+	case reflect.Map:
+		enc.encodeMap(v)
+
+	case reflect.Struct:
+		enc.encodeStruct(v)
+
+	case reflect.Interface, reflect.Ptr:
+		if v.IsNil() {
+			enc.encodeNil()
+		} else {
+			enc.encodeReflectValue(v.Elem())
+		}
+
+	// reflect.Func, reflect.Chan, reflect.UnsafePointer:
+	default:
+		enc.err = &UnsupportedTypeError{v.Type()}
+	}
+}
+
 func (enc *Encoder) encodeInteger(v int64) {
 	n := 0
 	enc.packInteger(&n, v)
@@ -220,15 +271,10 @@ func (enc *Encoder) encodeNil() {
 }
 
 func (enc *Encoder) encodeList(v reflect.Value) {
-	if v.Kind() != reflect.Array && v.IsNil() {
-		enc.encodeNil()
-		return
-	}
-
-	elemKind := v.Type().Elem().Kind()
-	if elemKind == reflect.Uint8 {	// VBS_BLOB
+	isSlice := (v.Kind() == reflect.Slice)
+	if v.Type().Elem().Kind() == reflect.Uint8 {	// VBS_BLOB
 		var buf []byte
-		if v.Kind() == reflect.Slice {
+		if isSlice {
 			buf = v.Interface().([]byte)
 		} else {
 			n := v.Len()
@@ -238,6 +284,11 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 			}
 		}
 		enc.encodeBlob(buf)
+		return
+	}
+
+	if isSlice && v.IsNil() {
+		enc.encodeNil()
 		return
 	}
 
@@ -290,22 +341,21 @@ func (enc *Encoder) encodeMap(v reflect.Value) {
 }
 
 func (enc *Encoder) encodeStruct(v reflect.Value) {
+	enc.depth++
 	if enc.depth >= enc.maxDepth {
 		enc.err = &DepthOverflowError{enc.maxDepth}
 		return
 	}
 
-	enc.depth++
 	enc.writeByte(byte(VBS_DICT))
 
-	tp := v.Type()
-	n := v.NumField()
-	for i := 0; i < n; i++ {
-		tf := tp.Field(i)
-		enc.encodeString(tf.Name)
+	fields := cachedTypeFields(v.Type())
+	for _, f := range fields {
+		enc.encodeString(f.name)
 
-		f := v.Field(i)
-		enc.encodeReflectValue(f)
+		value := v.Field(f.index)
+		enc.encodeReflectValue(value)
+
 		if enc.err != nil {
 			return
 		}
@@ -313,62 +363,6 @@ func (enc *Encoder) encodeStruct(v reflect.Value) {
 
 	enc.writeByte(byte(VBS_TAIL))
 	enc.depth--
-}
-
-func (enc *Encoder) encodePointer(v reflect.Value) {
-	if v.IsNil() {
-		enc.encodeNil()
-		return
-	}
-
-	enc.encodeReflectValue(v.Elem())
-}
-
-func (enc *Encoder) encodeReflectValue(v reflect.Value) {
-	if enc.err != nil {
-		return
-	}
-
-	if d, ok := v.Interface().(Decimal64); ok {
-		enc.encodeDecimal64(d)
-		return
-	} 
-
-	switch v.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		enc.encodeInteger(v.Int())
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		enc.encodeInteger(int64(v.Uint()))
-
-	case reflect.String:
-		enc.encodeString(v.String())
-
-	case reflect.Bool:
-		enc.encodeBool(v.Bool())
-
-	case reflect.Float32, reflect.Float64:
-		enc.encodeFloat(v.Float())
-
-	case reflect.Complex64, reflect.Complex128:
-		enc.encodeComplex(v.Complex())
-
-	case reflect.Array, reflect.Slice:
-		enc.encodeList(v)
-
-	case reflect.Map:
-		enc.encodeMap(v)
-
-	case reflect.Struct:
-		enc.encodeStruct(v)
-
-	case reflect.Interface, reflect.Ptr:
-		enc.encodePointer(v)
-
-	// reflect.Func, reflect.Chan, reflect.UnsafePointer:
-	default:
-		enc.err = &UnsupportedTypeError{v.Type()}
-	}
 }
 
 
