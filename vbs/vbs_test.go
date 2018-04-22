@@ -108,3 +108,22 @@ func BenchmarkMap(b *testing.B) {
 	benchmark(b, u)
 }
 
+var st1 = struct {
+	Alpha int	`vbs:"a"`
+	Bravo int	`vbs:"b,omitempty"`
+	Charlie string 	`json:"c,omitempty"`
+	Delta string
+	Echo []byte
+	Foxtrot float64
+}{1234567890, 0, "hello,world!", "你好，世界！", []byte{1,2,3,4,5,6,7}, -1.1}
+
+func TestMarshalStruct(t *testing.T) {
+	u := st1
+	testMarshal(t, u)
+}
+
+func BenchmarkStruct(b *testing.B) {
+	u := st1
+	benchmark(b, u)
+}
+

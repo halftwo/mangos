@@ -4,6 +4,7 @@ import (
 	"strings"
 	"unicode"
 	"reflect"
+	"sort"
 	"sync"
 	"sync/atomic"
 )
@@ -66,6 +67,12 @@ type vbsField struct {
 	omitEmpty bool
 }
 
+type fieldSlice []vbsField
+
+func (p fieldSlice) Len() int           { return len(p) }
+func (p fieldSlice) Less(i, j int) bool { return p[i].name < p[j].name }
+func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
 func typeFields(t reflect.Type) []vbsField {
 	var fields []vbsField
 
@@ -98,6 +105,7 @@ func typeFields(t reflect.Type) []vbsField {
 		vf := vbsField{name:name, index:i, tagged:tagged, omitEmpty:opts.Contains("omitempty"),}
 		fields = append(fields, vf)
 	}
+	sort.Sort(fieldSlice(fields))
 	return fields
 }
 

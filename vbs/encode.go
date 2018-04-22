@@ -340,6 +340,24 @@ func (enc *Encoder) encodeMap(v reflect.Value) {
 	enc.depth--
 }
 
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Ptr:
+		return v.IsNil()
+	}
+	return false
+}
+
 func (enc *Encoder) encodeStruct(v reflect.Value) {
 	enc.depth++
 	if enc.depth >= enc.maxDepth {
@@ -351,11 +369,13 @@ func (enc *Encoder) encodeStruct(v reflect.Value) {
 
 	fields := cachedTypeFields(v.Type())
 	for _, f := range fields {
-		enc.encodeString(f.name)
-
 		value := v.Field(f.index)
-		enc.encodeReflectValue(value)
+		if f.omitEmpty && isEmptyValue(value) {
+			continue
+		}
 
+		enc.encodeString(f.name)
+		enc.encodeReflectValue(value)
 		if enc.err != nil {
 			return
 		}

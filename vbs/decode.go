@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 	"bytes"
+	"sort"
 )
 
 
@@ -682,21 +683,16 @@ func (dec *Decoder) decodeStructValue(v reflect.Value) {
 			break
 		}
 
-		var vf *vbsField
-		for i := range fields {
-			f := &fields[i]
-			if f.name == name {
-				vf = f
-			}
-		}
+		k := sort.Search(len(fields), func(i int) bool {
+			return fields[i].name >= name
+		})
 
-		if vf == nil {
+		if k >= len(fields) {
 			continue
 		}
+		f := &fields[k]
 
-		dec.decodeReflectValue(v.Field(vf.index))
-		// TODO
+		dec.decodeReflectValue(v.Field(f.index))
 	}
 }
-
 
