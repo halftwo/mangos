@@ -275,7 +275,7 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 	if v.Type().Elem().Kind() == reflect.Uint8 {	// VBS_BLOB
 		var buf []byte
 		if isSlice {
-			buf = v.Interface().([]byte)
+			buf = v.Bytes()
 		} else {
 			n := v.Len()
 			buf = make([]byte, n)

@@ -181,12 +181,30 @@ func (dec *Decoder) decodeReflectValue(v reflect.Value) {
 		decode = (*Decoder).decodeStructValue
 
 	case reflect.Interface, reflect.Ptr:
-		if v.IsNil() {
-			dec.err = &InvalidUnmarshalError{v.Type()}
-			return
+		for v.IsValid() {
+			elem := v.Elem()
+			k := elem.Kind()
+			if k != reflect.Ptr && k != reflect.Interface {
+				break
+			}
+			v = elem
 		}
-		v = v.Elem()
-		decode = (*Decoder).decodeReflectValue
+
+		if v.Kind() == reflect.Ptr {
+			p := reflect.New(v.Type().Elem())
+			v.Set(p)
+			dec.decodeReflectValue(p.Elem())
+		} else if v.Kind() == reflect.Interface {
+			if v.NumMethod() == 0 {
+				x := dec.decodeInterface()
+				if dec.err == nil {
+					v.Set(reflect.ValueOf(x))
+				}
+			} else {
+				dec.err = &NonEmptyInterfaceError{}
+			}
+		}
+		return
 
 	// reflect.Func, reflect.Chan, reflect.UnsafePointer:
 	default:
@@ -560,8 +578,8 @@ func (dec *Decoder) decodeArrayValue(v reflect.Value) {
 	if v.Type().Elem().Kind() == reflect.Uint8 {
 		buf := dec.unpackByteArray()
 		if dec.err == nil {
-			if len(buf) > v.Len() {
-				dec.err = &ArrayOverflowError{v.Len()}
+			if len(buf) != v.Len() {
+				dec.err = &ArrayLengthError{v.Len()}
 			} else {
 				for i := 0; i < len(buf); i++ {
 					v.Index(i).SetUint(uint64(buf[i]))
@@ -574,11 +592,14 @@ func (dec *Decoder) decodeArrayValue(v reflect.Value) {
 	dec.unpackHeadOfList()
 	for i := 0; dec.err == nil; i++ {
 		if dec.unpackIfTail() {
+			if i != v.Len() {
+				dec.err = &ArrayLengthError{v.Len()}
+			}
 			break
 		}
 
 		if i >= v.Len() {
-			dec.err = &ArrayOverflowError{v.Len()}
+			dec.err = &ArrayLengthError{v.Len()}
 			return
 		}
 
@@ -699,5 +720,137 @@ func (dec *Decoder) decodeStructValue(v reflect.Value) {
 		f := &fields[i]
 		dec.decodeReflectValue(v.Field(f.index))
 	}
+}
+
+func (dec *Decoder) decodeInterface() (x interface{}) {
+	head := dec.unpackHead()
+	if dec.err != nil {
+		return
+	}
+
+	switch head.kind {
+	case VBS_INTEGER:
+		x = head.num
+
+	case VBS_STRING:
+		buf := dec.getBytes(head.num)
+		if dec.err == nil {
+			x = string(buf)
+		}
+
+	case VBS_FLOATING:
+		head2 := dec.unpackHeadKind(VBS_INTEGER, false)
+		if dec.err == nil {
+			x = makeFloat(head.num, int(head2.num))
+		}
+		
+	case VBS_DECIMAL:
+		head2 := dec.unpackHeadKind(VBS_INTEGER, false)
+		if dec.err == nil {
+			x = makeDecimal64(head.num, int(head2.num))
+		}
+
+	case VBS_BLOB:
+		buf := dec.takeBytes(head.num)
+		if dec.err == nil {
+			x = buf
+		}
+
+	case VBS_BOOL:
+		x = bool(head.num != 0)
+
+	case VBS_LIST:
+		x = dec.decodeInterfaceSlice()
+
+	case VBS_DICT:
+		x = dec.decodeInterfaceMap()
+
+	case VBS_NULL:
+		/* Do nothing */
+
+	default:
+		dec.err = &InvalidVbsError{}
+	}
+
+	return
+}
+
+func (dec *Decoder) decodeInterfaceSlice() (r interface{}) {
+	dec.depth++
+	if dec.depth > dec.maxDepth {
+		dec.err = &DepthOverflowError{dec.maxDepth}
+		return
+	}
+
+	s := make([]interface{}, 0)
+	for i := 0; dec.err == nil; i++ {
+		if dec.unpackIfTail() {
+			break
+		}
+
+		x := dec.decodeInterface()
+		if dec.err != nil {
+			return
+		}
+
+		s = append(s, x)
+	}
+	r = s
+	return
+}
+
+func (dec *Decoder) decodeInterfaceMap() (r interface{}) {
+	dec.depth++
+	if dec.depth > dec.maxDepth {
+		dec.err = &DepthOverflowError{dec.maxDepth}
+		return
+	}
+
+	var mi map[int64]interface{}
+	var ms map[string]interface{}
+
+	kind := reflect.Invalid
+	for dec.err == nil {
+		if dec.unpackIfTail() {
+			break
+		}
+
+		k := dec.decodeInterface()
+		v := dec.decodeInterface()
+		if dec.err != nil {
+			return
+		}
+
+		kk := reflect.ValueOf(k)
+		if kind == reflect.Invalid {
+			kind = kk.Kind()
+			switch kind {
+			case reflect.Int64:
+				mi = make(map[int64]interface{})
+				r = mi
+			case reflect.String:
+				ms = make(map[string]interface{})
+				r = ms
+			case reflect.Bool, reflect.Float64, reflect.Slice, reflect.Map:
+				dec.err = &InvalidUnmarshalError{kk.Type()}	// TODO
+				return
+			default:
+				panic("vbs: can't reach here!")
+			}
+		} else if kk.Kind() != kind {
+			dec.err = &InvalidUnmarshalError{kk.Type()}	// TODO
+			return
+		}
+
+		switch kind {
+		case reflect.Int64:
+			mi[kk.Int()] = v
+		case reflect.String:
+			ms[kk.String()] = v
+		default:
+			panic("vbs: can't reach here!")
+		}
+	}
+	return
 }
 

@@ -4,7 +4,9 @@ package vbs
 type Kind int8
 
 const (
-	VBS_TAIL Kind 	= 0x01         // Used to terminate list or dict.
+	VBS_INVALID Kind = 0x0
+
+	VBS_TAIL 	= 0x01         // Used to terminate list or dict.
 
 	VBS_LIST        = 0x02
 

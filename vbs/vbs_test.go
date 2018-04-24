@@ -109,13 +109,14 @@ func BenchmarkMap(b *testing.B) {
 }
 
 var st1 = struct {
-	Alpha int	`vbs:"a"`
+	Alpha int	`vbs:"alpha"`
 	Bravo int	`vbs:"b,omitempty"`
-	Charlie string 	`json:"c,omitempty"`
-	Delta string
+	Charlie string 	`json:"charlie,omitempty"`
+	Delta string	`json:"d"`
 	Echo []byte
 	Foxtrot float64
-}{1234567890, 0, "hello,world!", "你好，世界！", []byte{1,2,3,4,5,6,7}, -1.1}
+	Golf [4]byte
+}{1234567890, 0, "hello,world!", "你好，世界！", []byte{1,2,3,4,5,6,7}, -1.1, [4]byte{'a','b','c','d'},}
 
 func TestMarshalStruct(t *testing.T) {
 	u := st1
@@ -125,5 +126,36 @@ func TestMarshalStruct(t *testing.T) {
 func BenchmarkStruct(b *testing.B) {
 	u := st1
 	benchmark(b, u)
+}
+
+func testUnmarshalInterface(t *testing.T, u interface{}) {
+	got, err := Marshal(u)
+	if err != nil {
+		t.Fatalf("error encoding %T: %v:", u, err)
+	}
+	
+	var v interface{}
+	err = Unmarshal(got, &v)
+	if err != nil {
+		t.Fatalf("error decoding %T: %v:", u, err)
+	}
+	fmt.Println(v)
+}
+
+func TestUnmarshalInterface(t *testing.T) {
+	u1 := -1.25
+	testUnmarshalInterface(t, u1)
+
+	u2 := []int{1,2,3}
+	testUnmarshalInterface(t, u2)
+
+	u3 := []interface{}{666, "hello", "world", 0.999}
+	testUnmarshalInterface(t, u3)
+
+	u4 := map[int]string{1:"hello", 5:"world", -2:"faint"}
+	testUnmarshalInterface(t, u4)
+
+	u5 := map[string]interface{}{"hello":1.25, "world":"ok", "faint":123456789}
+	testUnmarshalInterface(t, u5)
 }
 

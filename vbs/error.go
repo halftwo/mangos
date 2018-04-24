@@ -59,12 +59,12 @@ func (e *NumberOverflowError) Error() string {
 }
 
 
-type ArrayOverflowError struct {
+type ArrayLengthError struct {
 	Len int
 }
 
-func (e *ArrayOverflowError) Error() string {
-        return fmt.Sprintf("vbs: allowed array len %d", e.Len)
+func (e *ArrayLengthError) Error() string {
+        return fmt.Sprintf("vbs: array length must be %d", e.Len)
 }
 
 
@@ -74,5 +74,28 @@ type MismatchedKindError struct {
 
 func (e *MismatchedKindError) Error() string {
         return fmt.Sprintf("vbs: mismatched kind: expect %s, got %s", e.Expect.String(), e.Got.String())
+}
+
+type NonEmptyInterfaceError struct {
+}
+
+func (e *NonEmptyInterfaceError) Error() string {
+	return "vbs: can't decode into non empty interface variable"
+}
+
+// An UnmarshalTypeError describes a VBS value that was
+// not appropriate for a value of a specific Go type.
+type UnmarshalTypeError struct {
+	Value  string       // description of VBS value - "INTEGER", "STRING", etc
+	Type   reflect.Type // type of Go value it could not be assigned to
+	Struct string       // name of the struct type containing the field
+	Field  string       // name of the field holding the Go value
+}
+
+func (e *UnmarshalTypeError) Error() string {
+	if e.Struct != "" || e.Field != "" {
+		return "vbs: cannot unmarshal " + e.Value + " into Go struct field " + e.Struct + "." + e.Field + " of type " + e.Type.String()
+	}
+	return "vbs: cannot unmarshal " + e.Value + " into Go value of type " + e.Type.String()
 }
 
