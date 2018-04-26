@@ -4,6 +4,7 @@ import (
 	"io"
 	"reflect"
 	"bytes"
+	"math"
 )
 
 type bufPacker [16]byte
@@ -123,8 +124,8 @@ func Marshal(data interface{}) ([]byte, error) {
 type Encoder struct {
 	bufPacker
 	w io.Writer
-	maxDepth int
-	depth int
+	maxDepth int16
+	depth int16
 	err error
 }
 
@@ -137,8 +138,10 @@ func NewEncoder(w io.Writer) *Encoder {
 func (enc *Encoder) SetMaxDepth(depth int) {
 	if depth < 0 {
 		enc.maxDepth = MaxDepth
+	} else if depth > math.MaxInt16 {
+		enc.maxDepth = math.MaxInt16
 	} else {
-		enc.maxDepth = depth
+		enc.maxDepth = int16(depth)
 	}
 }
 

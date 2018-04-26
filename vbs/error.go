@@ -16,7 +16,7 @@ func (e *UnsupportedTypeError) Error() string {
 
 
 type DepthOverflowError struct {
-	MaxDepth int
+	MaxDepth int16
 }
 
 func (e *DepthOverflowError) Error() string {

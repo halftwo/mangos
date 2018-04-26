@@ -4,7 +4,9 @@ import (
 	"math"
 )
 
-var MaxLength = math.MaxInt32
+var MaxLength int = 0	// <= 0 means no limits
 
-var MaxDepth = math.MaxInt32
+var MaxStringLength int = math.MaxInt32
+
+var MaxDepth int16 = math.MaxInt16
 
