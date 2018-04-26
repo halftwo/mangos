@@ -11,9 +11,10 @@ import (
 // A Decoder reads and decodes VBS values from an input stream.
 type Decoder struct {
 	r io.Reader
+	pos int
+	depth int
 	maxLength int
 	maxDepth int
-	depth int
 	err error
 	eof bool
 	bytes []byte
@@ -35,9 +36,16 @@ func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{r:r, maxLength:MaxLength, maxDepth:MaxDepth}
 }
 
+func NewDecoderLength(r io.Reader, maxLength int) *Decoder {
+	if maxLength <= 0 {
+		maxLength = MaxLength
+	}
+	return &Decoder{r:r, maxLength:maxLength, maxDepth:MaxDepth}
+}
+
 func NewDecoderBytes(buf []byte) *Decoder {
 	r := bytes.NewBuffer(buf)
-	return &Decoder{r:r, maxLength:len(buf), maxDepth:len(buf)/2}
+	return &Decoder{r:r, maxLength:len(buf), maxDepth:MaxDepth}
 }
 
 // SetMaxLength sets the max length of string and blob in the VBS encoded data
@@ -80,6 +88,7 @@ func (dec *Decoder) headBuffer() []byte {
 		dec.hEnd = left
 
 		n, err := dec.r.Read(dec.hBuffer[dec.hEnd:])
+		dec.pos += n
 		if n > 0 {
 			dec.hEnd += n
 		} else if err != nil {
@@ -105,6 +114,7 @@ func (dec *Decoder) read(buf []byte) (n int) {
 		dec.hStart = dec.hEnd
 		n += left
 		k, err := dec.r.Read(buf[left:num])
+		dec.pos += k
 		if err != nil {
 			if err == io.EOF {
 				dec.err = &InvalidVbsError{}
@@ -119,7 +129,8 @@ func (dec *Decoder) read(buf []byte) (n int) {
 
 func (dec *Decoder) getBytes(number int64) []byte {
 	num := int(number)
-	if num > dec.maxLength {
+	left := (dec.maxLength - dec.pos) + (dec.hEnd - dec.hStart)
+	if num > left {
 		dec.err = &InvalidVbsError{}
 		return dec.bytes[:0]
 	}
@@ -133,12 +144,14 @@ func (dec *Decoder) getBytes(number int64) []byte {
 }
 
 func (dec *Decoder) takeBytes(number int64) []byte {
-	if number > int64(dec.maxLength) {
+	num := int(number)
+	left := (dec.maxLength - dec.pos) + (dec.hEnd - dec.hStart)
+	if num > left {
 		dec.err = &InvalidVbsError{}
 		return []byte{}
 	}
 
-	buf := make([]byte, number)
+	buf := make([]byte, num)
 	k := dec.read(buf)
 	return buf[:k]
 }
