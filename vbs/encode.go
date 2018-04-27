@@ -127,6 +127,7 @@ type Encoder struct {
 	maxDepth int16
 	depth int16
 	err error
+	bytes []byte
 }
 
 // NewEncoder returns a new Encoder that writes to w
@@ -279,12 +280,15 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 		var buf []byte
 		if isSlice {
 			buf = v.Bytes()
+		} else if v.CanAddr() {
+			buf = v.Slice(0, v.Len()).Interface().([]byte)
 		} else {
 			n := v.Len()
-			buf = make([]byte, n)
-			for i := 0; i < n; i++ {
-				buf[i] = byte(v.Index(i).Uint())
+			if cap(enc.bytes) < n {
+				enc.bytes = make([]byte, n)
 			}
+			buf = enc.bytes[:n]
+			reflect.Copy(reflect.ValueOf(buf), v)
 		}
 		enc.encodeBlob(buf)
 		return

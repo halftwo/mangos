@@ -210,6 +210,17 @@ func (dec *Decoder) takeBytes(number int64) []byte {
 	return buf[:k]
 }
 
+func (dec *Decoder) copyBytes(buf []byte) int {
+	num := len(buf)
+	if num > dec.left() || num > dec.maxStrLength {
+		dec.err = &InvalidVbsError{}
+		return 0
+	}
+
+	k := dec.mustRead(buf)
+	return k
+}
+
 func (dec *Decoder) decodeReflectValue(v reflect.Value) {
 	if dec.err != nil {
 		return
@@ -573,15 +584,15 @@ func (dec *Decoder) decodeStringValue(v reflect.Value) {
 	}
 }
 
-func (dec *Decoder) unpackByteArray() []byte {
+func (dec *Decoder) unpackByteArray(buf []byte) {
 	head := dec.unpackHeadKind(VBS_BLOB, true)
 	if dec.err == nil {
-		buf := dec.getBytes(head.num)
-		if dec.err == nil {
-			return buf
+		if int(head.num) == len(buf) {
+			dec.copyBytes(buf)
+		} else {
+			dec.err = &ArrayLengthError{len(buf)}
 		}
 	}
-	return []byte{}
 }
 
 func (dec *Decoder) unpackByteSlice() []byte {
@@ -642,17 +653,9 @@ func (dec *Decoder) decodeComplexValue(v reflect.Value) {
 }
 
 func (dec *Decoder) decodeArrayValue(v reflect.Value) {
-	if v.Type().Elem().Kind() == reflect.Uint8 {
-		buf := dec.unpackByteArray()
-		if dec.err == nil {
-			if len(buf) != v.Len() {
-				dec.err = &ArrayLengthError{v.Len()}
-			} else {
-				for i := 0; i < len(buf); i++ {
-					v.Index(i).SetUint(uint64(buf[i]))
-				}
-			}
-		}
+	if v.Type().Elem().Kind() == reflect.Uint8 {	// VBS_BLOB
+		buf := v.Slice(0, v.Len()).Interface().([]byte)
+		dec.unpackByteArray(buf)
 		return
 	}
 
