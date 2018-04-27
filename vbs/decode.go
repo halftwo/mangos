@@ -621,7 +621,7 @@ func (dec *Decoder) unpackFloat() (r float64) {
 		expo := int(head2.num)
 		r = makeFloat(mantissa, expo)
 	}
-	return 
+	return
 }
 
 func (dec *Decoder) unpackDecimal64() (r Decimal64) {
@@ -632,7 +632,7 @@ func (dec *Decoder) unpackDecimal64() (r Decimal64) {
 		expo := int(head2.num)
 		r = makeDecimal64(mantissa, expo)
 	}
-	return 
+	return
 }
 
 func (dec *Decoder) decodeFloatValue(v reflect.Value) {
@@ -813,7 +813,7 @@ func (dec *Decoder) decodeInterface() (x interface{}) {
 		if dec.err == nil {
 			x = makeFloat(head.num, int(head2.num))
 		}
-		
+
 	case VBS_DECIMAL:
 		head2 := dec.unpackHeadKind(VBS_INTEGER, false)
 		if dec.err == nil {

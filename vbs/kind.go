@@ -6,7 +6,7 @@ type Kind int8
 const (
 	VBS_INVALID Kind = 0x0
 
-	VBS_TAIL 	= 0x01         // Used to terminate list or dict.
+	VBS_TAIL	= 0x01         // Used to terminate list or dict.
 
 	VBS_LIST        = 0x02
 
@@ -38,12 +38,12 @@ const (
 
 	VBS_STRING      = 0x20         // 001x xxxx
 
-	VBS_INTEGER     = 0x40  
+	VBS_INTEGER     = 0x40
 )
 
-const VBS_DESCRIPTOR_MAX 	= 0x7fff
+const VBS_DESCRIPTOR_MAX	= 0x7fff
 
-const VBS_SPECIAL_DESCRIPTOR 	= 0x8000
+const VBS_SPECIAL_DESCRIPTOR	= 0x8000
 
 
 var kindNames = [...]string{

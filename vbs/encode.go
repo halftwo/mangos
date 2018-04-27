@@ -180,7 +180,7 @@ func (enc *Encoder) encodeReflectValue(v reflect.Value) {
 	if d, ok := v.Interface().(Decimal64); ok {
 		enc.encodeDecimal64(d)
 		return
-	} 
+	}
 
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -317,7 +317,7 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 
 	enc.writeByte(byte(VBS_TAIL))
 	enc.depth--
-} 
+}
 
 func (enc *Encoder) encodeMap(v reflect.Value) {
 	if v.IsNil() {

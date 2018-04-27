@@ -72,7 +72,7 @@ func TestMarshalSlice(t *testing.T) {
 	u2 := [3][]float64{[]float64{0.1,0.2,0.3}, []float64{0.4,0.5,0.6}, []float64{0.7,0.8,0.9}}
 	testMarshal(t, u2)
 
-	u3 := []int{} 	// empty 
+	u3 := []int{}	// empty 
 	testMarshal(t, u3)
 
 	var u4 []int	// nil 
@@ -111,7 +111,7 @@ func BenchmarkMap(b *testing.B) {
 var st1 = struct {
 	Alpha int	`vbs:"alpha"`
 	Bravo int	`vbs:"b,omitempty"`
-	Charlie string 	`json:"charlie,omitempty"`
+	Charlie string	`json:"charlie,omitempty"`
 	Delta string	`json:"d"`
 	Echo []byte
 	Foxtrot float64
@@ -133,7 +133,7 @@ func testUnmarshalInterface(t *testing.T, u interface{}) {
 	if err != nil {
 		t.Fatalf("error encoding %T: %v:", u, err)
 	}
-	
+
 	var v interface{}
 	err = Unmarshal(got, &v)
 	if err != nil {
