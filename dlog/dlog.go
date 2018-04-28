@@ -151,10 +151,8 @@ func (lg *dlogger) SetOption(option int) {
 	lg.option = option
 }
 
-func (lg *dlogger) Log(tag string, format string, a ...interface{}) {
-	var locus string
-
-	_, file, line, ok := runtime.Caller(0)
+func getLocus(skip int) (locus string) {
+	_, file, line, ok := runtime.Caller(skip + 1)
 	if ok {
 		i := strings.LastIndexByte(file, os.PathSeparator)
 		if i >= 0 {
@@ -162,7 +160,16 @@ func (lg *dlogger) Log(tag string, format string, a ...interface{}) {
 		}
 		locus = file + ":" + strconv.Itoa(line)
 	}
+	return
+}
 
+func (lg *dlogger) Log(tag string, format string, a ...interface{}) {
+	var locus string
+	if lg == theLogger {
+		locus = getLocus(2)
+	} else {
+		locus = getLocus(1)
+	}
 	lg.XLog(lg.identity, tag, locus, format, a...)
 }
 
