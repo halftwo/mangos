@@ -8,7 +8,7 @@ const AlphabetLower = "0123456789abcdefghjkmnpqrstvwxyz"
 
 
 const _S = -2	// space
-const _P = -3	// '-' partition separator, ignored
+const _P = -3	// '-' partition separator
 
 var detab = [128]int8{
         -1, -1, -1, -1, -1, -1, -1, -1, -1, _S, _S, _S, _S, _S, -1, -1,
@@ -65,7 +65,7 @@ func encode(alphabet []byte, out, in []byte) int {
 		n += 8
 	}
 
-	if k > 0 {
+	if i > 0 && k > 0 {
 		c1 = 0
 		c2 = 0
 		c3 = 0
@@ -114,9 +114,8 @@ func Decode(out []byte, in []byte) int {
 	return decode(out, in, false)
 }
 
-// DecodeFuzzy do the same thing as Decode except it will ignore ascii
-// space and '-'. It will treat 'i' 'l' as '1', 'o' as '0', 'u' as 'v',
-// all case-insensitive.
+// DecodeFuzzy do the same thing as Decode except it will ignore '-'.
+// It will treat 'i' 'l' as '1', 'o' as '0', 'u' as 'v', all case-insensitive.
 func DecodeFuzzy(out []byte, in []byte) int {
 	return decode(out, in, true)
 }
@@ -124,7 +123,9 @@ func DecodeFuzzy(out []byte, in []byte) int {
 func decode(out []byte, in []byte, fuzzy bool) int {
 	var r, r2 byte
 	var n, k int
-	for i := 0; i < len(in) && k < len(out); i++ {
+	ilen := len(in)
+	olen := len(out)
+	for i := 0; i < ilen && k < olen; i++ {
 		c := in[i]
 		x := -1
 		if c < 128 {
@@ -132,15 +133,15 @@ func decode(out []byte, in []byte, fuzzy bool) int {
 		}
 
 		if x < 0 {
-			if fuzzy && x < -1 {
+			if fuzzy && x <= _P {
 				continue
 			}
 			return -(i + 1)
 		} else if x >= 32 {
-			if fuzzy {
-				x -= 32
+			x -= 32
+			if !fuzzy {
+				return -(i + 1)
 			}
-			return -(i + 1)
 		}
 
 		n++
@@ -160,6 +161,7 @@ func decode(out []byte, in []byte, fuzzy bool) int {
 			r = byte(x << 4)
 		case 5:
 			out[k] = r + byte(x >> 1)
+			k++
 			r = byte(x << 7)
 		case 6:
 			r2 = r
