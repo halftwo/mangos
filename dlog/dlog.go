@@ -1,3 +1,6 @@
+// Package dlog implements dlog client.
+// The dlog servers in C++ can be found at 
+// https://github.com/halftwo/knotty/dlog
 package dlog
 
 import (
@@ -6,149 +9,199 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
-const RECORD_TYPE_RAW	= 0
-const RECORD_VERSION	= 2
+const record_TYPE_RAW	= 0
+const record_VERSION	= 3
 
-type timeval struct {
+type recordTimeval struct {
 	sec int32
 	usec int32
 }
 
-type head struct {
-        size uint16	// include the size itself and trailing '\0' 
-	ttv byte	// truncated:1, type:3, version:4
+const record_HEAD_SIZE	= 16
+const record_BIG_ENDIAN = 0x08
+
+// little endian byte order
+type recordHead struct {
+	size uint16	// include the size itself and trailing '\0' 
+	ttev byte	// truncated:1, type:3, bigendian:1, version:3
 	locusEnd uint8
 	port uint16
 	pid  int16
-        time timeval
+	time recordTimeval
 }
 
-type record struct {
+type recordMan struct {
+	pid int16
+	ttev byte
+	locusEnd uint8
+	size uint16
 	off int
-	head head
 	buf [4000]byte
 }
 
 var recPool = sync.Pool{
 	New: func() interface{} {
-		r := new(record)
-		r.head.ttv = (RECORD_TYPE_RAW << 4) | (RECORD_VERSION)
-		r.head.pid = int16(os.Getpid())
+		pid := int16(os.Getpid())
+		r := new(recordMan)
+		r.pid = pid
+		r.ttev = (record_TYPE_RAW << 4) | record_BIG_ENDIAN | (record_VERSION)
+		r.buf[6] = byte(pid >> 8)
+		r.buf[7] = byte(pid)
 		return r
 	},
 }
 
-func (rec *record) Reset() {
-	rec.off = int(unsafe.Sizeof(rec.head))
+func (rec *recordMan) Reset() {
+	rec.off = record_HEAD_SIZE
+	rec.locusEnd = 0
+	rec.size = 0
 }
 
+// Max length of identity, tag and locus strings
 const (
 	IDENTITY_MAX	= 63
 	TAG_MAX		= 63
 	LOCUS_MAX       = 127
 )
 
-func (rec *record) SetIdentityTagLocus(identity, tag, locus string) {
-
+func (rec *recordMan) SetIdentityTagLocus(identity, tag, locus string) {
 	rec.putMax(identity, IDENTITY_MAX)
 	rec.WriteByte(' ')
 	rec.putMax(tag, TAG_MAX)
 	rec.WriteByte(' ')
 	rec.putMax(locus, LOCUS_MAX)
-
-	rec.head.locusEnd = uint8(rec.off) - uint8(unsafe.Sizeof(rec.head))
+	rec.locusEnd = uint8(rec.off - record_HEAD_SIZE)
 	rec.WriteByte(' ')
 }
 
-func (rec *record) putMax(s string, max int) {
+func (rec *recordMan) putMax(s string, max int) {
+	k := len(s)
+	if k > max {
+		k = max
+	}
+
 	if rec.off < len(rec.buf) {
-		k := len(s)
-		buf := []byte(s)
-		if k <= max {
-			if k > 0 {
-				rec.off += copy(rec.buf[rec.off:], buf)
-			} else {
-				rec.buf[rec.off] = '-'
-				rec.off++
-			}
+		if k > 0 {
+			buf := []byte(s)
+			copy(rec.buf[rec.off:], buf[:k])
 		} else {
-			rec.off += copy(rec.buf[rec.off:], buf[:max])
+			rec.buf[rec.off] = '-'
+			k = 1
 		}
 	}
+	rec.off += k
 }
 
-func (rec *record) Write(buf []byte) (int, error) {
+func (rec *recordMan) Write(buf []byte) (int, error) {
 	if rec.off < len(rec.buf) {
-		k := copy(rec.buf[rec.off:], buf)
-		rec.off += k
+		copy(rec.buf[rec.off:], buf)
 	}
-	return len(buf), nil
+	k := len(buf)
+	rec.off += k
+	return k, nil
 }
 
-func (rec *record) WriteByte(b byte) error {
+func (rec *recordMan) WriteByte(b byte) error {
 	if rec.off < len(rec.buf) {
 		rec.buf[rec.off] = b
-		rec.off++
 	}
+	rec.off++
 	return nil
 }
 
-func (rec *record) Bytes() []byte {
-	if rec.off < len(rec.buf) {
-		rec.buf[rec.off] = 0
-		rec.off++
-		rec.head.ttv &= 0x7F
-	} else { // truncated
-		rec.buf[len(rec.buf)-1] = 0
-		rec.off = len(rec.buf)
-		rec.head.ttv |= 0x80
+func (rec *recordMan) Bytes() []byte {
+	if rec.size > 0 {
+		return rec.buf[:rec.size]
 	}
-	rec.head.size = uint16(rec.off)
 
-	h := &rec.head
-	// TODO test ByteOrder
-	rec.buf[0] = byte(h.size)
-	rec.buf[1] = byte(h.size >> 8)
-	rec.buf[2] = h.ttv
-	rec.buf[3] = h.locusEnd
-	rec.buf[6] = byte(h.pid)
-	rec.buf[7] = byte(h.pid >> 8)
-	return rec.buf[:rec.off]
+	size := rec.off
+	if size <= len(rec.buf) {
+		// trim trailing '\r' and '\n'
+		for ; size > record_HEAD_SIZE; size-- {
+			c := rec.buf[size - 1]
+			if c != '\r' && c != '\n' {
+				break
+			}
+		}
+	}
+
+	ttev := rec.ttev
+	if size < len(rec.buf) {
+		size++
+	} else {
+		// truncated
+		ttev |= 0x80
+		size = len(rec.buf)
+	}
+	rec.size = uint16(size)
+	rec.buf[size - 1] = 0
+
+	rec.buf[0] = byte(size >> 8)
+	rec.buf[1] = byte(size)
+	rec.buf[2] = ttev
+	rec.buf[3] = rec.locusEnd
+	return rec.buf[:size]
 }
 
-func (rec *record) Truncated() bool {
+func (rec *recordMan) BodyBytes() []byte {
+	if rec.size == 0 {
+		rec.Bytes()
+	}
+	return rec.buf[record_HEAD_SIZE:rec.size]
+}
+
+func (rec *recordMan) Truncated() bool {
 	return rec.off >= len(rec.buf)
 }
 
-var theLogger = newdlogger()
+var theLogger = NewDlogger("")
 
-type dlogger struct {
+type Dlogger struct {
+	option uint32
 	identity string
-	option int
-	con atomic.Value // net.Conn
+	con atomic.Value	// net.Conn
+	lastFailTime time.Time
+	mutex sync.Mutex
 }
 
-func newdlogger() *dlogger {
-	id := os.Args[0]
-	i := strings.LastIndexByte(id, os.PathSeparator)
-	if i >= 0 {
-		id = id[i+1:]
+func NewDlogger(identity string) *Dlogger {
+	var id = identity
+	if identity == "" {
+		id = os.Args[0]
+		var i = strings.LastIndexByte(id, os.PathSeparator)
+		if i >= 0 {
+			id = id[i+1:]
+		}
 	}
-	return &dlogger{identity:id}
+
+	var lg = &Dlogger{identity:id}
+	return lg
 }
 
-func (lg *dlogger) SetIdentity(identity string) {
-	lg.identity = identity
-}
+// Options for dlog
+const (
+	OPT_STDERR	= 0x01	// Always print to stderr in addition to write to dlogd.
+	OPT_PERROR	= 0x02	// If failed to connect dlogd, print to stderr.
+	OPT_TCP		= 0x04	// Use TCP instead of UDP to connect dlogd server.
+)
 
-func (lg *dlogger) SetOption(option int) {
-	lg.option = option
+func (lg *Dlogger) SetOption(option int) {
+	opt := uint32(option)
+	old := atomic.SwapUint32(&lg.option, opt)
+	old_tcp := old & OPT_TCP
+	new_tcp := opt & OPT_TCP
+	if (old_tcp ^ new_tcp) != 0 {
+		c := lg.con.Load()
+		if c != nil {
+			lg.shut(c.(net.Conn))
+		}
+	}
 }
 
 func getLocus(skip int) (locus string) {
@@ -163,7 +216,10 @@ func getLocus(skip int) (locus string) {
 	return
 }
 
-func (lg *dlogger) Log(tag string, format string, a ...interface{}) {
+// Log send a dlog to dlogd. 
+// identity is from the logger's default.
+// locus is from runtime.Caller()
+func (lg *Dlogger) Log(tag string, format string, a ...interface{}) {
 	var locus string
 	if lg == theLogger {
 		locus = getLocus(2)
@@ -173,44 +229,93 @@ func (lg *dlogger) Log(tag string, format string, a ...interface{}) {
 	lg.XLog(lg.identity, tag, locus, format, a...)
 }
 
-func (lg *dlogger) XLog(identity string, tag string, locus string, format string, a ...interface{}) {
-	rec := recPool.Get().(*record)
+func (lg *Dlogger) printStderr(rec *recordMan) {
+	now := time.Now()
+	ts := now.Format("060102-150405")
+	fmt.Fprintf(os.Stderr, "%s :: %d+%d %s\n", ts, rec.pid, 0, rec.BodyBytes())
+}
+
+// XLog send a dlog to dlogd. 
+// identity and locus are also specified in the arguments.
+func (lg *Dlogger) XLog(identity string, tag string, locus string, format string, a ...interface{}) {
+	rec := recPool.Get().(*recordMan)
+	defer recPool.Put(rec)
+
 	rec.Reset()
 	rec.SetIdentityTagLocus(identity, tag, locus)
 	fmt.Fprintf(rec, format, a...)
+	buf := rec.Bytes()
+
+	perror_done := false
+	if lg.option & OPT_STDERR != 0 {
+		perror_done = true
+		lg.printStderr(rec)
+	}
 
 	var con net.Conn
 	c := lg.con.Load()
 	if c != nil {
 		con = c.(net.Conn)
 	} else {
-		con = dialUdp()
+		con = lg.dial()
 		if con == nil {
-			// TODO
+			if (lg.option & OPT_PERROR != 0) && !perror_done {
+				perror_done = true
+				lg.printStderr(rec)
+			}
 			return
 		}
-		lg.con.Store(con)
 	}
 
-	buf := rec.Bytes()
 	_, err := con.Write(buf)
 	if err != nil {
-		// TODO
+		lg.shut(con)
+		if (lg.option & OPT_PERROR != 0) && !perror_done {
+			perror_done = true
+			lg.printStderr(rec)
+		}
 	}
-	recPool.Put(rec)
 }
 
-func dialUdp() net.Conn {
-	con, err := net.Dial("udp", "[::1]:6109")
-	if err != nil {
+func (lg *Dlogger) dial() net.Conn {
+	lg.mutex.Lock()
+	defer lg.mutex.Unlock()
+
+	c := lg.con.Load()
+	if c != nil {
+		return c.(net.Conn)
+	}
+
+	if time.Since(lg.lastFailTime) < time.Second {
 		return nil
 	}
+
+	var con net.Conn
+	var err error
+	if lg.option & OPT_TCP != 0 {
+		con, err = net.Dial("tcp", "127.0.0.1:6109")
+	} else {
+		con, err = net.Dial("udp", "127.0.0.1:6109")
+	}
+
+	if err != nil {
+		lg.lastFailTime = time.Now()
+		return nil
+	}
+	lg.con.Store(con)
 	return con
 }
 
+func (lg *Dlogger) shut(con net.Conn) {
+	con.Close()
 
-func SetIdentity(identity string) {
-	theLogger.SetIdentity(identity)
+	lg.mutex.Lock()
+	defer lg.mutex.Unlock()
+
+	c := lg.con.Load()
+	if c == con {
+		lg.con.Store(nil)
+	}
 }
 
 func SetOption(option int) {

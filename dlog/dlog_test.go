@@ -7,6 +7,7 @@ import (
 )
 
 func Test1(t *testing.T) {
-	dlog.Log("XXX", "hello, %s!", "world")
+	dlog.SetOption(dlog.OPT_STDERR)
+	dlog.Log("XXX", "hello, %s!\r\n\r\n", "world")
 }
 
