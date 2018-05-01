@@ -8,7 +8,7 @@ import (
 
 type Tokenizer interface {
 	Count() int
-	HasNext() bool
+	HasMore() bool
 	Next() string
 }
 
@@ -23,7 +23,7 @@ func (tk *strTokenizer) Count() int {
 	return tk.count
 }
 
-func (tk *strTokenizer) HasNext() bool {
+func (tk *strTokenizer) HasMore() bool {
 	return !tk.done
 }
 
