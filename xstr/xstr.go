@@ -7,10 +7,13 @@ import (
 
 
 func SplitKeyValue(s string, sep string) (key, value string) {
-	ss := strings.SplitN(s, sep, 2)
-	if len(ss) == 1 {
-		return ss[0], ""
+	i := strings.Index(s, sep)
+	if i < 0 {
+		key = s
+	} else {
+		key = s[:i]
+		value = s[i+1:]
 	}
-	return ss[0], ss[1]
+	return
 }
 
