@@ -16,8 +16,8 @@ func testMarshal(t *testing.T, u interface{}) {
 	fmt.Printf("Marshal %T\t\t%v\n", u, len(got))
 
 	pv := reflect.New(reflect.TypeOf(u))
-	err = Unmarshal(got, pv.Interface())
-	if err != nil {
+	b, err := Unmarshal(got, pv.Interface())
+	if err != nil || len(b) > 0 {
 		t.Fatalf("error decoding %T: %v:", u, err)
 	}
 
@@ -135,8 +135,8 @@ func testUnmarshalInterface(t *testing.T, u interface{}) {
 	}
 
 	var v interface{}
-	err = Unmarshal(got, &v)
-	if err != nil {
+	b, err := Unmarshal(got, &v)
+	if err != nil || len(b) > 0 {
 		t.Fatalf("error decoding %T: %v:", u, err)
 	}
 	fmt.Println(v)

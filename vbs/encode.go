@@ -7,6 +7,10 @@ import (
 	"math"
 )
 
+type Marshaler interface {
+	MarshalVbs() ([]byte, error)
+}
+
 type bufPacker [16]byte
 
 func (bp *bufPacker) packIntOrStringHead(n *int, kind Kind, num uint64) {
@@ -176,6 +180,19 @@ func (enc *Encoder) encodeReflectValue(v reflect.Value) {
 	if enc.err != nil {
 		return
 	}
+
+	/* TODO: shall we use the Marshaler's MarshalVbs() method?
+	if m, ok := v.Interface().(Marshaler); ok {
+		b, err := m.MarshalVbs()
+		if err != nil {
+			enc.err = err
+		} else {
+			// TODO check b is valid encoded
+			enc.write(b)
+		}
+		return
+	}
+	*/
 
 	if d, ok := v.Interface().(Decimal64); ok {
 		enc.encodeDecimal64(d)
@@ -347,24 +364,6 @@ func (enc *Encoder) encodeMap(v reflect.Value) {
 	enc.depth--
 }
 
-func isEmptyValue(v reflect.Value) bool {
-	switch v.Kind() {
-	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
-		return v.Len() == 0
-	case reflect.Bool:
-		return !v.Bool()
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() == 0
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return v.Uint() == 0
-	case reflect.Float32, reflect.Float64:
-		return v.Float() == 0
-	case reflect.Interface, reflect.Ptr:
-		return v.IsNil()
-	}
-	return false
-}
-
 func (enc *Encoder) encodeStruct(v reflect.Value) {
 	enc.depth++
 	if enc.depth >= enc.maxDepth {
@@ -374,14 +373,14 @@ func (enc *Encoder) encodeStruct(v reflect.Value) {
 
 	enc.writeByte(byte(VBS_DICT))
 
-	fields := cachedTypeFields(v.Type())
+	fields := CachedStructFields(v.Type())
 	for _, f := range fields {
-		value := v.Field(f.index)
-		if f.omitEmpty && isEmptyValue(value) {
+		value := v.Field(f.Index)
+		if f.OmitEmpty && IsEmptyValue(value) {
 			continue
 		}
 
-		enc.encodeString(f.name)
+		enc.encodeString(f.Name)
 		enc.encodeReflectValue(value)
 		if enc.err != nil {
 			return

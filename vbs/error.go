@@ -49,6 +49,14 @@ func (e *InvalidVbsError) Error() string {
         return "vbs: Invalid vbs-encoded bytes"
 }
 
+type IntegerOverflowError struct {
+	kind reflect.Kind
+	value int64
+}
+
+func (e *IntegerOverflowError) Error() string {
+        return fmt.Sprintf("vbs: integer %d can't be stored in %v", e.value, e.kind)
+}
 
 type NumberOverflowError struct {
 	MaxBits int

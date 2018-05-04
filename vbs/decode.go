@@ -7,6 +7,9 @@ import (
 	"bytes"
 )
 
+type Unmarshaler interface {
+	UnmarshalVbs([]byte) error
+}
 
 // A Decoder reads and decodes VBS values from an input stream.
 type Decoder struct {
@@ -27,10 +30,11 @@ type Decoder struct {
 
 // Unmarshal decodes the VBS-encoded data and stores the result in the value pointed to by v.
 // If v is nil or not a pointer, Unmarshal returns an InvalidUnmarshalError.
-func Unmarshal(buf []byte, v interface{}) error {
+func Unmarshal(buf []byte, v interface{}) (rest []byte, err error) {
 	dec := NewDecoderBytes(buf)
 	dec.Decode(v)
-	return dec.err
+	b := dec.r.(*bytes.Buffer)
+	return b.Bytes(), dec.err
 }
 
 // NewDecoder returns a Decoder that decodes VBS from input stream r
@@ -225,6 +229,15 @@ func (dec *Decoder) decodeReflectValue(v reflect.Value) {
 	if dec.err != nil {
 		return
 	}
+
+	/* TODO: shall we use the Unmarshaler's UnmarshalVbs() method?
+	if m, ok := v.Interface().(Unmarshaler); ok {
+		// TODO get the []byte
+		b := []byte{}
+		dec.err = m.UnmarshalVbs(b)
+		return
+	}
+	*/
 
 	var decode decodeFunc
 	switch v.Kind() {
@@ -556,6 +569,9 @@ func (dec *Decoder) decodeIntValue(v reflect.Value) {
 	head := dec.unpackHeadKind(VBS_INTEGER, true)
 	if dec.err == nil {
 		v.SetInt(head.num)
+		if v.Int() != head.num {
+			dec.err = &IntegerOverflowError{kind:v.Kind(), value:head.num}
+		}
 	}
 }
 
@@ -563,6 +579,9 @@ func (dec *Decoder) decodeUintValue(v reflect.Value) {
 	head := dec.unpackHeadKind(VBS_INTEGER, true)
 	if dec.err == nil {
 		v.SetUint(uint64(head.num))
+		if v.Uint() != uint64(head.num) {
+			dec.err = &IntegerOverflowError{kind:v.Kind(), value:head.num}
+		}
 	}
 }
 
@@ -761,7 +780,7 @@ func (dec *Decoder) decodeMapValue(v reflect.Value) {
 
 func (dec *Decoder) decodeStructValue(v reflect.Value) {
 	dec.unpackHeadOfDict()
-	fields := cachedTypeFields(v.Type())
+	fields := CachedStructFields(v.Type())
 
 	for dec.err == nil {
 		if dec.unpackIfTail() {
@@ -773,22 +792,12 @@ func (dec *Decoder) decodeStructValue(v reflect.Value) {
 			break
 		}
 
-		i, j := 0, len(fields)
-		for i < j {
-			m := int(uint(i+j) >> 1) // avoid overflow
-			if fields[m].name >= name {
-				j = m
-			} else {
-				i = m + 1
-			}
-		}
-
-		if i >= len(fields) || fields[i].name != name {
+		f := fields.Find(name)
+		if f == nil {
 			continue
 		}
 
-		f := &fields[i]
-		dec.decodeReflectValue(v.Field(f.index))
+		dec.decodeReflectValue(v.Field(f.Index))
 	}
 }
 

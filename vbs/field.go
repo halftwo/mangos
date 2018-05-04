@@ -61,19 +61,35 @@ func isValidTag(s string) bool {
 }
 
 type vbsField struct {
-	name      string
-	index     int
-	tagged    bool
-	omitEmpty bool
+	Name      string
+	Index     int
+	OmitEmpty bool
 }
 
-type fieldSlice []vbsField
+type StructFields []vbsField
 
-func (p fieldSlice) Len() int           { return len(p) }
-func (p fieldSlice) Less(i, j int) bool { return p[i].name < p[j].name }
-func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p StructFields) Len() int           { return len(p) }
+func (p StructFields) Less(i, j int) bool { return p[i].Name < p[j].Name }
+func (p StructFields) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
-func typeFields(t reflect.Type) []vbsField {
+func (p StructFields) Find(name string) *vbsField {
+	i, j := 0, len(p)
+	for i < j {
+		m := int(uint(i+j) >> 1) // avoid overflow
+		if p[m].Name >= name {
+			j = m
+		} else {
+			i = m + 1
+		}
+	}
+
+	if i >= len(p) || p[i].Name != name {
+		return nil
+	}
+	return &p[i]
+}
+
+func getStructFields(t reflect.Type) StructFields {
 	var fields []vbsField
 
 	for i := 0; i < t.NumField(); i++ {
@@ -97,15 +113,14 @@ func typeFields(t reflect.Type) []vbsField {
 			continue
 		}
 
-		tagged := name != ""
 		if name == "" {
 			name = sf.Name
 		}
 
-		vf := vbsField{name:name, index:i, tagged:tagged, omitEmpty:opts.Contains("omitempty"),}
+		vf := vbsField{Name:name, Index:i, OmitEmpty:opts.Contains("omitempty"),}
 		fields = append(fields, vf)
 	}
-	sort.Sort(fieldSlice(fields))
+	sort.Sort(StructFields(fields))
 	return fields
 }
 
@@ -114,8 +129,8 @@ var fieldCache struct {
 	mutex sync.Mutex   // used only by writers
 }
 
-// cachedTypeFields is like typeFields but uses a cache to avoid repeated work.
-func cachedTypeFields(t reflect.Type) []vbsField {
+// CachedStructFields is like getStructFields but uses a cache to avoid repeated work.
+func CachedStructFields(t reflect.Type) StructFields {
 	m, _ := fieldCache.value.Load().(map[reflect.Type][]vbsField)
 	f := m[t]
 	if f != nil {
@@ -124,7 +139,7 @@ func cachedTypeFields(t reflect.Type) []vbsField {
 
 	// Compute fields without lock.
 	// Might duplicate effort but won't hold other computations back.
-	f = typeFields(t)
+	f = getStructFields(t)
 	if f == nil {
 		f = []vbsField{}
 	}
@@ -141,4 +156,21 @@ func cachedTypeFields(t reflect.Type) []vbsField {
 	return f
 }
 
+func IsEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Ptr:
+		return v.IsNil()
+	}
+	return false
+}
 
