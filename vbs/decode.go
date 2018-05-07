@@ -282,17 +282,23 @@ func (dec *Decoder) decodeReflectValue(v reflect.Value) {
 		}
 
 		if v.Kind() == reflect.Ptr {
-			p := reflect.New(v.Type().Elem())
-			v.Set(p)
-			dec.decodeReflectValue(p.Elem())
+			if v.IsNil() {
+				p := reflect.New(v.Type().Elem())
+				v.Set(p)
+			}
+			dec.decodeReflectValue(v.Elem())
 		} else if v.Kind() == reflect.Interface {
-			if v.NumMethod() == 0 {
-				x := dec.decodeInterface()
-				if dec.err == nil {
-					v.Set(reflect.ValueOf(x))
+			if v.IsNil() {
+				if v.NumMethod() == 0 {
+					x := dec.decodeInterface()
+					if dec.err == nil {
+						v.Set(reflect.ValueOf(x))
+					}
+				} else {
+					dec.err = &NonEmptyInterfaceError{}
 				}
 			} else {
-				dec.err = &NonEmptyInterfaceError{}
+				dec.decodeReflectValue(v.Elem())
 			}
 		}
 		return

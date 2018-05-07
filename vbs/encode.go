@@ -152,8 +152,12 @@ func (enc *Encoder) SetMaxDepth(depth int) {
 
 // Encode writes the VBS encoding of v to the Encoder
 func (enc *Encoder) Encode(data interface{}) error {
-	v := reflect.ValueOf(data)
-	enc.encodeReflectValue(v)
+	if data == nil {
+		enc.encodeNil()
+	} else {
+		v := reflect.ValueOf(data)
+		enc.encodeReflectValue(v)
+	}
 	return enc.err
 }
 
