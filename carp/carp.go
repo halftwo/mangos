@@ -53,12 +53,13 @@ func newCarp(members []uint64, combine CombineFunction) *stdCarp {
 	return cp
 }
 
-// NewCarp return a new Carp
+// NewCarp return a new Carp. If the combine function is nil, the default is used.
 func NewCarp(members []uint64, combine CombineFunction) Carp {
 	return newCarp(members, combine)
 }
 
-// NewCarp return a new Carp with weighted members
+// NewCarp return a new Carp with weighted members.
+// If the combine function is nil, the default is used.
 func NewCarpWeight(members []uint64, weights []uint32, combine CombineFunction) Carp {
 	cp := newCarp(members, combine)
 
