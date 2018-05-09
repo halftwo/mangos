@@ -804,6 +804,7 @@ func (dec *Decoder) decodeStructValue(v reflect.Value) {
 
 		f := fields.Find(name)
 		if f == nil {
+			dec.decodeInterface()
 			continue
 		}
 
