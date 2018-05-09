@@ -11,9 +11,9 @@ type Marshaler interface {
 	MarshalVbs() ([]byte, error)
 }
 
-type bufPacker [16]byte
+type BytesPacker [16]byte
 
-func (bp *bufPacker) packIntOrStringHead(n *int, kind Kind, num uint64) {
+func (bp *BytesPacker) packIntOrStringHead(n *int, kind Kind, num uint64) {
 	for ; num >= 0x20; *n++ {
 		bp[*n] = 0x80 | byte(num)
 		num >>= 7
@@ -22,11 +22,11 @@ func (bp *bufPacker) packIntOrStringHead(n *int, kind Kind, num uint64) {
 	*n++
 }
 
-func (bp *bufPacker) packStringHead(n *int, len int) {
+func (bp *BytesPacker) PackStringHead(n *int, len int) {
 	bp.packIntOrStringHead(n, VBS_STRING, uint64(len))
 }
 
-func (bp *bufPacker) packInteger(n *int, v int64) {
+func (bp *BytesPacker) PackInteger(n *int, v int64) {
 	if v < 0 {
 		bp.packIntOrStringHead(n, VBS_INTEGER + 0x20, uint64(-v))
 	} else {
@@ -34,7 +34,7 @@ func (bp *bufPacker) packInteger(n *int, v int64) {
 	}
 }
 
-func (bp *bufPacker) packDescriptor(n *int, descriptor uint16) {
+func (bp *BytesPacker) PackDescriptor(n *int, descriptor uint16) {
 	v := descriptor
 	if v > 0 && v < (VBS_SPECIAL_DESCRIPTOR | VBS_DESCRIPTOR_MAX) {
 		if (v & VBS_SPECIAL_DESCRIPTOR) != 0 {
@@ -54,7 +54,7 @@ func (bp *bufPacker) packDescriptor(n *int, descriptor uint16) {
 	}
 }
 
-func (bp *bufPacker) packKind(n *int, kind Kind, num uint64) {
+func (bp *BytesPacker) PackKind(n *int, kind Kind, num uint64) {
 	for ; num > 0; *n++ {
 		bp[*n] = 0x80 | byte(num)
 		num >>= 7
@@ -63,30 +63,30 @@ func (bp *bufPacker) packKind(n *int, kind Kind, num uint64) {
 	*n++
 }
 
-func (bp *bufPacker) packHeadOfList(n *int, variety int) {
+func (bp *BytesPacker) PackHeadOfList(n *int, variety int) {
 	if variety > 0 {
-		bp.packKind(n, VBS_LIST, uint64(variety))
+		bp.PackKind(n, VBS_LIST, uint64(variety))
 	} else {
 		bp[*n] = byte(VBS_LIST)
 		*n++
 	}
 }
 
-func (bp *bufPacker) packHeadOfDict(n *int, variety int) {
+func (bp *BytesPacker) PackHeadOfDict(n *int, variety int) {
 	if variety > 0 {
-		bp.packKind(n, VBS_DICT, uint64(variety))
+		bp.PackKind(n, VBS_DICT, uint64(variety))
 	} else {
 		bp[*n] = byte(VBS_DICT)
 		*n++
 	}
 }
 
-func (bp *bufPacker) packTail(n *int) {
+func (bp *BytesPacker) PackTail(n *int) {
 	bp[*n] = byte(VBS_TAIL)
 	*n++
 }
 
-func (bp *bufPacker) packBool(n *int, v bool) {
+func (bp *BytesPacker) PackBool(n *int, v bool) {
 	if v {
 		bp[*n] = byte(VBS_BOOL + 1)
 	} else {
@@ -95,24 +95,24 @@ func (bp *bufPacker) packBool(n *int, v bool) {
 	*n++
 }
 
-func (bp *bufPacker) packFloat(n *int, v float64) {
+func (bp *BytesPacker) PackFloat(n *int, v float64) {
 	mantissa, expo := breakFloat(v)
 	if mantissa < 0 {
-		bp.packKind(n, VBS_FLOATING + 1, uint64(-mantissa))
+		bp.PackKind(n, VBS_FLOATING + 1, uint64(-mantissa))
 	} else {
-		bp.packKind(n, VBS_FLOATING, uint64(mantissa))
+		bp.PackKind(n, VBS_FLOATING, uint64(mantissa))
 	}
-	bp.packInteger(n, int64(expo))
+	bp.PackInteger(n, int64(expo))
 }
 
-func (bp *bufPacker) packDecimal64(n *int, v Decimal64) {
+func (bp *BytesPacker) PackDecimal64(n *int, v Decimal64) {
 	mantissa, expo := breakDecimal64(v)
 	if mantissa < 0 {
-		bp.packKind(n, VBS_DECIMAL + 1, uint64(-mantissa))
+		bp.PackKind(n, VBS_DECIMAL + 1, uint64(-mantissa))
 	} else {
-		bp.packKind(n, VBS_DECIMAL, uint64(mantissa))
+		bp.PackKind(n, VBS_DECIMAL, uint64(mantissa))
 	}
-	bp.packInteger(n, int64(expo))
+	bp.PackInteger(n, int64(expo))
 }
 
 // Marshal returns the VBS encoding of v.
@@ -126,7 +126,7 @@ func Marshal(data interface{}) ([]byte, error) {
 
 // An Encoder writes VBS values to an output stream.
 type Encoder struct {
-	bufPacker
+	BytesPacker
 	w io.Writer
 	maxDepth int16
 	depth int16
@@ -176,8 +176,8 @@ func (enc *Encoder) writeByte(b byte) {
 
 func (enc *Encoder) encodeDescriptor(descriptor uint16) {
 	n := 0
-	enc.packDescriptor(&n, descriptor)
-	enc.write(enc.bufPacker[0:n])
+	enc.PackDescriptor(&n, descriptor)
+	enc.write(enc.BytesPacker[0:n])
 }
 
 func (enc *Encoder) encodeReflectValue(v reflect.Value) {
@@ -246,20 +246,20 @@ func (enc *Encoder) encodeReflectValue(v reflect.Value) {
 
 func (enc *Encoder) encodeInteger(v int64) {
 	n := 0
-	enc.packInteger(&n, v)
-	enc.write(enc.bufPacker[0:n])
+	enc.PackInteger(&n, v)
+	enc.write(enc.BytesPacker[0:n])
 }
 
 func (enc *Encoder) encodeFloat(v float64) {
 	n := 0
-	enc.packFloat(&n, v)
-	enc.write(enc.bufPacker[0:n])
+	enc.PackFloat(&n, v)
+	enc.write(enc.BytesPacker[0:n])
 }
 
 func (enc *Encoder) encodeDecimal64(v Decimal64) {
 	n := 0
-	enc.packDecimal64(&n, v)
-	enc.write(enc.bufPacker[0:n])
+	enc.PackDecimal64(&n, v)
+	enc.write(enc.BytesPacker[0:n])
 }
 
 func (enc *Encoder) encodeComplex(v complex128) {
@@ -279,15 +279,15 @@ func (enc *Encoder) encodeBool(v bool) {
 
 func (enc *Encoder) encodeString(v string) {
 	n := 0
-	enc.packStringHead(&n, len(v))
-	enc.write(enc.bufPacker[0:n])
+	enc.PackStringHead(&n, len(v))
+	enc.write(enc.BytesPacker[0:n])
 	enc.write([]byte(v))
 }
 
 func (enc *Encoder) encodeBlob(v []byte) {
 	n := 0
-	enc.packKind(&n, VBS_BLOB, uint64(len(v)))
-	enc.write(enc.bufPacker[0:n])
+	enc.PackKind(&n, VBS_BLOB, uint64(len(v)))
+	enc.write(enc.BytesPacker[0:n])
 	enc.write(v)
 }
 
