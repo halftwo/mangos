@@ -104,6 +104,10 @@ func (dec *Decoder) More() bool {
 	return !((dec.eof || dec.finished) && dec.hEnd == dec.hStart)
 }
 
+func (dec *Decoder) Consumed() int {
+	return dec.pos - int(dec.hEnd - dec.hStart)
+}
+
 func (dec *Decoder) left() int {
 	if dec.maxLength > 0 {
 		return (dec.maxLength - dec.pos) + int(dec.hEnd - dec.hStart)
