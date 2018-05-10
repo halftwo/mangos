@@ -24,8 +24,7 @@ func TestSrp6a(t *testing.T) {
 		"544523b524b0d57d5ea77a2775d2ecfa032cfbdbf52fb3786160279004e57ae6" +
 		"af874e7303ce53299ccc041c7bc308d82a5698f3a8d0c38271ae35f8e9dbfbb6" +
 		"94b5c803d89f7ae435de236d525f54759b65e372fcd68ef20fa7111f9e4aff73"
-	N := make([]byte, hex.DecodedLen(len(hexN)))
-	hex.Decode(N, []byte(hexN))
+	N, _ := hex.DecodeString(hexN)
 
 	id := make([]byte, 16)
 	pass := make([]byte, 16)
