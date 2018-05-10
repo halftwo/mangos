@@ -52,7 +52,7 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 
 		/* receiver, Current, in, out */
 		if m.Type.NumIn() < 3 || m.Type.NumIn() > 4 || m.Type.NumOut() != 1 {
-			return nil, fmt.Errorf("The number of input arguments (%d) or output arguments (%s) is not correct", m.Type.NumIn(), m.Type.NumOut())
+			return nil, fmt.Errorf("The number of input arguments (%d) or output arguments (%d) is not correct", m.Type.NumIn(), m.Type.NumOut())
 		}
 
 		if errType := m.Type.Out(0); errType != typeOfError {
@@ -61,7 +61,7 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 
 		cur := m.Type.In(1)
 		if cur.Name() != "Current" && cur.PkgPath() != "mangos/xic" {
-			return nil, fmt.Errorf("The first argument must be of type xic.Current instead of %s", cur.Name)
+			return nil, fmt.Errorf("The first argument must be of type xic.Current instead of %s", cur.Name())
 		}
 
 		mi := &MethodInfo{}

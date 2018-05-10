@@ -14,7 +14,7 @@ func TestArguments(t *testing.T) {
 	args.Set("hello", 5.4321)
 	args.Set("world", m)
 
-	fmt.Println(args.GetString("hello", ""))
+	fmt.Println(args.GetString("hello"))
 
 	type Params struct {
 		A float32	`vbs:"a"`

@@ -20,6 +20,22 @@ const (
 	MAX_SUITE
 )
 
+func (c cipherSuite) String() string {
+	switch c {
+	case UNKNOWN_SUITE:
+		return "UNKNOWN"
+	case CLEARTEXT:
+		return "CLEARTEXT"
+	case AES128_EAX:
+		return "AES128_EAX"
+	case AES192_EAX:
+		return "AES192_EAX"
+	case AES256_EAX:
+		return "AES256_EAX"
+	}
+	return "INVALID"
+}
+
 /*
    After encypting, the msg is:
 		IV[16] + CIPHERTEXT + MAC[16]
@@ -37,6 +53,7 @@ type xicCipher struct {
 	// The IV[16] is: RANDOM[8] + COUNTER[8]
 	ox *eax.EaxCtx
 	oNonce []byte	// encrypt
+	oMAC [16]byte
 
 	ix *eax.EaxCtx
 	iNonce []byte	// decrypt
@@ -118,7 +135,7 @@ func getRandomBytes(buf []byte) error {
 	return err
 }
 
-func (c *xicCipher) encryptGetIV(IV []byte) bool {
+func (c *xicCipher) OutputGetIV(IV []byte) bool {
 	if !increaseCounter(c.oNonce[c.cOff:]) {
 		return false
 	}
@@ -127,28 +144,30 @@ func (c *xicCipher) encryptGetIV(IV []byte) bool {
 	if err != nil {
 		return false
 	}
+	copy(IV, c.oNonce[c.rOff:])
 	return true
 }
 
-func (c *xicCipher) encryptStart(header []byte) {
+func (c *xicCipher) OutputStart(header []byte) {
 	c.ox.Start(true, c.oNonce, header)
 }
 
-func (c *xicCipher) encryptUpdate(out, in []byte) {
+func (c *xicCipher) OutputUpdate(out, in []byte) {
 	c.ox.Update(out, in)
 }
 
-func (c *xicCipher) encryptFinish(MAC []byte) {
-	c.ox.Finish(MAC)
+func (c *xicCipher) OutputMakeMAC() []byte {
+	c.ox.Finish(c.oMAC[:])
+	return c.oMAC[:]
 }
 
 
-func (c *xicCipher) decryptSetIV(IV []byte) bool {
+func (c *xicCipher) InputSetIV(IV []byte) bool {
 	if !increaseCounter(c.iNonce[c.cOff:]) {
 		return false
 	}
 
-	if !bytes.Equal(c.iNonce[c.cOff:], IV[8:]) {
+	if !bytes.Equal(c.iNonce[c.cOff:], IV[8:16]) {
 		return false
 	}
 
@@ -156,16 +175,18 @@ func (c *xicCipher) decryptSetIV(IV []byte) bool {
 	return true
 }
 
-func (c *xicCipher) decryptStart(header []byte) {
+func (c *xicCipher) InputStart(header []byte) {
 	c.ix.Start(false, c.iNonce, header)
 }
 
-func (c *xicCipher) decryptUpdate(out, in []byte) {
+func (c *xicCipher) InputUpdate(out, in []byte) {
 	c.ix.Update(out, in)
 }
 
-func (c *xicCipher) decryptFinish(MAC []byte) {
-	c.ix.Finish(MAC)
+func (c *xicCipher) InputCheckMAC(MAC []byte) bool {
+	var mac [16]byte
+	c.ix.Finish(mac[:])
+	return bytes.Equal(MAC, mac[:])
 }
 
 
