@@ -16,12 +16,7 @@ import (
 )
 
 const record_TYPE_RAW	= 0
-const record_VERSION	= 3
-
-type recordTimeval struct {
-	sec int32
-	usec int32
-}
+const record_VERSION	= 4
 
 const record_HEAD_SIZE	= 16
 const record_BIG_ENDIAN = 0x08
@@ -32,12 +27,12 @@ type recordHead struct {
 	ttev byte	// truncated:1, type:3, bigendian:1, version:3
 	locusEnd uint8
 	port uint16
-	pid  int16
-	time recordTimeval
+	pid  uint16
+	usec int64
 }
 
 type recordMan struct {
-	pid int16
+	pid uint16
 	ttev byte
 	locusEnd uint8
 	size uint16
@@ -47,7 +42,7 @@ type recordMan struct {
 
 var recPool = sync.Pool{
 	New: func() interface{} {
-		pid := int16(os.Getpid())
+		pid := uint16(os.Getpid())
 		r := new(recordMan)
 		r.pid = pid
 		r.ttev = (record_TYPE_RAW << 4) | record_BIG_ENDIAN | (record_VERSION)
