@@ -106,11 +106,10 @@ func (b *srp6aBase) setParameter(g int, N []byte, bits int) {
 	padCopy(b._g, b.ig.Bytes())
 
 	// Compute: k = SHA1(N | PAD(g)) 
-	buf := make([]byte, b.hasher.Size())
 	b.hasher.Reset()
 	b.hasher.Write(b._N)
 	b.hasher.Write(b._g)
-	b.hasher.Sum(buf)
+	buf := b.hasher.Sum(nil)
 	b.ik = &big.Int{}
 	b.ik.SetBytes(buf)
 }
@@ -135,11 +134,11 @@ func (b *srp6aBase) compute_u() {
 		}
 
                 // Compute: u = SHA1(PAD(A) | PAD(B)) 
-		b._u = make([]byte, b.hasher.Size())
+		buf := make([]byte, b.byteLen)
 		b.hasher.Reset()
-		b.hasher.Write(b._A)
-		b.hasher.Write(b._B)
-		b.hasher.Sum(b._u)
+		padCopy(buf, b._A); b.hasher.Write(buf)
+		padCopy(buf, b._B); b.hasher.Write(buf)
+		b._u = b.hasher.Sum(nil)
 	}
 }
 
@@ -156,12 +155,12 @@ func (b *srp6aBase) ComputeM1() []byte {
 		}
 
 		// Compute: M1 = SHA1(PAD(A) | PAD(B) | PAD(S))
-		b._M1 = make([]byte, b.hasher.Size())
+		buf := make([]byte, b.byteLen)
 		b.hasher.Reset()
-		b.hasher.Write(b._A)
-		b.hasher.Write(b._B)
-		b.hasher.Write(b._S)
-		b.hasher.Sum(b._M1)
+		padCopy(buf, b._A); b.hasher.Write(buf)
+		padCopy(buf, b._B); b.hasher.Write(buf)
+		padCopy(buf, b._S); b.hasher.Write(buf)
+		b._M1 = b.hasher.Sum(nil)
 	}
 	return b._M1
 }
@@ -174,12 +173,12 @@ func (b *srp6aBase) ComputeM2() []byte {
 		}
 
                 // Compute: M2 = SHA1(PAD(A) | M1 | PAD(S)) 
-		b._M2 = make([]byte, b.hasher.Size())
+		buf := make([]byte, b.byteLen)
 		b.hasher.Reset()
-		b.hasher.Write(b._A)
+		padCopy(buf, b._A); b.hasher.Write(buf)
 		b.hasher.Write(b._M1)
-		b.hasher.Write(b._S)
-		b.hasher.Sum(b._M2)
+		padCopy(buf, b._S); b.hasher.Write(buf)
+		b._M2 = b.hasher.Sum(nil)
 	}
 	return b._M2
 }
@@ -192,10 +191,10 @@ func (b *srp6aBase) ComputeK() []byte {
 		}
 
 		// Compute: K = SHA1(PAD(S))  
-		b._K = make([]byte, b.hasher.Size())
+		buf := make([]byte, b.byteLen)
 		b.hasher.Reset()
-		b.hasher.Write(b._S)
-		b.hasher.Sum(b._K)
+		padCopy(buf, b._S); b.hasher.Write(buf)
+		b._K = b.hasher.Sum(nil)
 	}
 	return b._K
 }
@@ -230,21 +229,26 @@ func (srv *Srp6aServer) GenerateB() []byte {
 			srv.err = err
 			return nil
 		}
-		srv.ib = &big.Int{}
-		srv.ib.SetBytes(buf[:])
-
-		// Compute: B = k*v + g^b % N
-		srv._B = make([]byte, srv.byteLen)
-		i1 := &big.Int{}
-		i1.Mul(srv.ik, srv.iv)
-
-		i2 := &big.Int{}
-		i2.Exp(srv.ig, srv.ib, srv.iN)
-
-		i1.Add(i1, i2)
-		i1.Mod(i1, srv.iN)
-		padCopy(srv._B, i2.Bytes())
+		srv.set_b(buf[:])
 	}
+	return srv._B
+}
+
+func (srv *Srp6aServer) set_b(b []byte) []byte {
+	srv.ib = &big.Int{}
+	srv.ib.SetBytes(b)
+
+	// Compute: B = k*v + g^b % N
+	srv._B = make([]byte, srv.byteLen)
+	i1 := &big.Int{}
+	i1.Mul(srv.ik, srv.iv)
+
+	i2 := &big.Int{}
+	i2.Exp(srv.ig, srv.ib, srv.iN)
+
+	i1.Add(i1, i2)
+	i1.Mod(i1, srv.iN)
+	padCopy(srv._B, i1.Bytes())
 	return srv._B
 }
 
@@ -312,6 +316,11 @@ func NewClient(g int, N []byte, bits int, hash string) *Srp6aClient {
 	return cli
 }
 
+func (cli *Srp6aClient) set_salt(salt []byte) {
+	cli.salt = make([]byte, len(salt))
+	copy(cli.salt, salt)
+}
+
 func (cli *Srp6aClient) SetIdentity(id string, pass string) {
 	cli.identity = id
 	cli.pass = pass
@@ -328,17 +337,16 @@ func (cli *Srp6aClient) compute_x() {
 
 		// Compute: x = SHA1(salt | SHA1(Id | ":" | pass)) 
 		cli.ix = &big.Int{}
-		buf := make([]byte, cli.hasher.Size())
 		cli.hasher.Reset()
 		cli.hasher.Write([]byte(cli.identity))
 		cli.hasher.Write([]byte{':'})
 		cli.hasher.Write([]byte(cli.pass))
-		cli.hasher.Sum(buf)
+		buf := cli.hasher.Sum(nil)
 
 		cli.hasher.Reset()
 		cli.hasher.Write(cli.salt)
 		cli.hasher.Write(buf)
-		cli.hasher.Sum(buf)
+		buf = cli.hasher.Sum(nil)
 		cli.ix.SetBytes(buf)
 	}
 }
@@ -377,15 +385,20 @@ func (cli *Srp6aClient) GenerateA() []byte {
 			cli.err = err
 			return nil
 		}
-		cli.ia = &big.Int{}
-		cli.ia.SetBytes(buf[:])
-
-                // Compute: A = g^a % N 
-		cli._A = make([]byte, cli.byteLen)
-		i1 := &big.Int{}
-		i1.Exp(cli.ig, cli.ia, cli.iN)
-		padCopy(cli._A, i1.Bytes())
+		cli.set_a(buf[:])
         }
+	return cli._A
+}
+
+func (cli *Srp6aClient) set_a(a []byte) []byte{
+	cli.ia = &big.Int{}
+	cli.ia.SetBytes(a)
+
+	// Compute: A = g^a % N 
+	cli._A = make([]byte, cli.byteLen)
+	i1 := &big.Int{}
+	i1.Exp(cli.ig, cli.ia, cli.iN)
+	padCopy(cli._A, i1.Bytes())
 	return cli._A
 }
 
