@@ -210,7 +210,7 @@ func (dec *Decoder) takeBytes(number int64) []byte {
 	num := int(number)
 	if num > dec.left() || num > dec.maxStrLength {
 		dec.err = &InvalidVbsError{}
-		return []byte{}
+		return nil
 	}
 
 	buf := make([]byte, num)
@@ -624,15 +624,18 @@ func (dec *Decoder) unpackByteArray(buf []byte) {
 	}
 }
 
-func (dec *Decoder) unpackByteSlice() []byte {
-	head := dec.unpackHeadKind(VBS_BLOB, true)
-	if dec.err == nil {
-		buf := dec.takeBytes(head.num)
-		if dec.err == nil {
-			return buf
-		}
+func (dec *Decoder) unpackByteSlice() (buf []byte) {
+	head := dec.unpackHead()
+	if dec.err != nil {
+		return
 	}
-	return []byte{}
+
+	if head.kind == VBS_BLOB || head.kind == VBS_STRING {
+		buf = dec.takeBytes(head.num)
+	} else {
+		dec.err = &MismatchedKindError{Expect:VBS_BLOB, Got:head.kind}
+	}
+	return
 }
 
 func (dec *Decoder) decodeBoolValue(v reflect.Value) {
@@ -643,12 +646,22 @@ func (dec *Decoder) decodeBoolValue(v reflect.Value) {
 }
 
 func (dec *Decoder) unpackFloat() (r float64) {
-	head := dec.unpackHeadKind(VBS_FLOATING, true)
-	head2 := dec.unpackHeadKind(VBS_INTEGER, false)
-	if dec.err == nil {
-		mantissa := head.num
-		expo := int(head2.num)
-		r = makeFloat(mantissa, expo)
+	head := dec.unpackHead()
+	if dec.err != nil {
+		return
+	}
+
+	if head.kind == VBS_INTEGER {
+		r = float64(head.num)
+	} else if head.kind == VBS_FLOATING {
+		head2 := dec.unpackHeadKind(VBS_INTEGER, false)
+		if dec.err == nil {
+			mantissa := head.num
+			expo := int(head2.num)
+			r = makeFloat(mantissa, expo)
+		}
+	} else {
+		dec.err = &MismatchedKindError{Expect:VBS_FLOATING, Got:head.kind}
 	}
 	return
 }
