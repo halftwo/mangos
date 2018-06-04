@@ -36,10 +36,8 @@ func Test1(t *testing.T) {
 					case 0:
 						x = 'i'
 					case 1:
-						x = 'I'
+						x = 'l'
 					}
-				case 'V', 'v':
-					x = 'u'
 				}
 
 				if !('0' <= x && x <= '9') {
