@@ -126,6 +126,25 @@ func (b *srp6aBase) N() []byte {
 	return b._N
 }
 
+func computeU(hasher hash.Hash, bufLen int, A, B []byte) []byte {
+	if len(A) == 0 || len(B) == 0 {
+		return nil
+	}
+
+	// Compute: u = SHA1(PAD(A) | PAD(B))
+	buf := make([]byte, bufLen)
+	hasher.Reset()
+	padCopy(buf, A); hasher.Write(buf)
+	padCopy(buf, B); hasher.Write(buf)
+	u := hasher.Sum(nil)
+	for i := len(u) - 1; i >= 0; i-- {
+		if u[i] != 0 {
+			return u
+		}
+	}
+	return nil
+}
+
 func (b *srp6aBase) compute_u() {
 	if len(b._u) == 0 && b.err == nil {
 		if len(b._A) == 0 || len(b._B) == 0 {
@@ -133,12 +152,10 @@ func (b *srp6aBase) compute_u() {
 			return
 		}
 
-                // Compute: u = SHA1(PAD(A) | PAD(B)) 
-		buf := make([]byte, b.byteLen)
-		b.hasher.Reset()
-		padCopy(buf, b._A); b.hasher.Write(buf)
-		padCopy(buf, b._B); b.hasher.Write(buf)
-		b._u = b.hasher.Sum(nil)
+		b._u = computeU(b.hasher, b.byteLen, b._A, b._B)
+		if len(b._u) == 0 {
+			b.err = fmt.Errorf("u can't be 0")
+		}
 	}
 }
 
@@ -224,12 +241,23 @@ func (srv *Srp6aServer) SetV(v []byte)  {
 func (srv *Srp6aServer) GenerateB() []byte {
 	if len(srv._B) == 0 && srv.err == nil {
 		var buf [randomSize]byte
-		err := genRandomBytes(buf[:])
-		if err != nil {
-			srv.err = err
-			return nil
+		for len(srv._B) == 0 {
+			err := genRandomBytes(buf[:])
+			if err != nil {
+				srv.err = err
+				return nil
+			}
+			srv.set_b(buf[:])
+
+			if len(srv._A) > 0 {
+				u := computeU(srv.hasher, srv.byteLen, srv._A, srv._B)
+				if len(u) == 0 {
+					srv._B = nil
+				} else {
+					srv._u = u
+				}
+			}
 		}
-		srv.set_b(buf[:])
 	}
 	return srv._B
 }
@@ -239,7 +267,6 @@ func (srv *Srp6aServer) set_b(b []byte) []byte {
 	srv.ib.SetBytes(b)
 
 	// Compute: B = k*v + g^b % N
-	srv._B = make([]byte, srv.byteLen)
 	i1 := &big.Int{}
 	i1.Mul(srv.ik, srv.iv)
 
@@ -248,6 +275,10 @@ func (srv *Srp6aServer) set_b(b []byte) []byte {
 
 	i1.Add(i1, i2)
 	i1.Mod(i1, srv.iN)
+	if i1.Sign() == 0 {
+		return nil
+	}
+	srv._B = make([]byte, srv.byteLen)
 	padCopy(srv._B, i1.Bytes())
 	return srv._B
 }
@@ -380,24 +411,29 @@ func (cli *Srp6aClient) GenerateA() []byte {
 		}
 
 		var buf [randomSize]byte
-		err := genRandomBytes(buf[:])
-		if err != nil {
-			cli.err = err
-			return nil
+		for len(cli._A) == 0 {
+			err := genRandomBytes(buf[:])
+			if err != nil {
+				cli.err = err
+				return nil
+			}
+			cli.set_a(buf[:])
 		}
-		cli.set_a(buf[:])
         }
 	return cli._A
 }
 
-func (cli *Srp6aClient) set_a(a []byte) []byte{
+func (cli *Srp6aClient) set_a(a []byte) []byte {
 	cli.ia = &big.Int{}
 	cli.ia.SetBytes(a)
 
 	// Compute: A = g^a % N 
-	cli._A = make([]byte, cli.byteLen)
 	i1 := &big.Int{}
 	i1.Exp(cli.ig, cli.ia, cli.iN)
+	if i1.Sign() == 0 {
+		return nil
+	}
+	cli._A = make([]byte, cli.byteLen)
 	padCopy(cli._A, i1.Bytes())
 	return cli._A
 }
