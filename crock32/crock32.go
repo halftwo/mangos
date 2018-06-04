@@ -16,9 +16,9 @@ var detab = [128]int8{
         _S, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, _P, -1, -1,
          0,  1,  2,  3,  4,  5,  6,  7,  8,  9, -1, -1, -1, -1, -1, -1,
         -1, 10, 11, 12, 13, 14, 15, 16, 17, 33, 18, 19, 33, 20, 21, 32,
-        22, 23, 24, 25, 26, 59, 27, 28, 29, 30, 31, -1, -1, -1, -1, -1,
+        22, 23, 24, 25, 26, -1, 27, 28, 29, 30, 31, -1, -1, -1, -1, -1,
         -1, 10, 11, 12, 13, 14, 15, 16, 17, 33, 18, 19, 33, 20, 21, 32,
-        22, 23, 24, 25, 26, 59, 27, 28, 29, 30, 31, -1, -1, -1, -1, -1,
+        22, 23, 24, 25, 26, -1, 27, 28, 29, 30, 31, -1, -1, -1, -1, -1,
 }
 
 // EncodedLen returns the length in bytes of the crock32 encoding
@@ -115,7 +115,7 @@ func Decode(out []byte, in []byte) int {
 }
 
 // DecodeFuzzy do the same thing as Decode except it will ignore '-'.
-// It will treat 'i' 'l' as '1', 'o' as '0', 'u' as 'v', all case-insensitive.
+// It will treat 'i' 'l' as '1', 'o' as '0', all case-insensitive.
 func DecodeFuzzy(out []byte, in []byte) int {
 	return decode(out, in, true)
 }
