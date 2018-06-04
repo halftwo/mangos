@@ -55,6 +55,12 @@ func Test1(t *testing.T) {
 			p := rand.Intn(len(v2))
 			v2 = bytes.Join([][]byte{v2[:p], v2[p:]}, []byte("-"))
 			j = DecodeFuzzy(u2[:], v2)
+
+			c := DammChecksum(v2)
+			v2 = append(v2, AlphabetLower[c])
+			if !DammValidate(v2) {
+				t.Fatalf("DammValidate() failed, c=%d, s=%v", c, string(v2))
+			}
 		}
 
 		if !bytes.Equal(u1[:i], u2[:j]) {
