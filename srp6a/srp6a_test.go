@@ -39,7 +39,7 @@ func TestSrp6a(t *testing.T) {
 	cli := NewClient(2, N, BITS, "SHA1")
 
 	cli.SetIdentity(id, pass)
-	cli.set_salt(salt)
+	cli.SetSalt(salt)
 
 	v := cli.ComputeV()
 	srv.SetV(v)
@@ -79,9 +79,12 @@ func BenchmarkSrp6a(b *testing.B) {
 		srv := NewServer(2, N, BITS, "SHA256")
 		cli := NewClient(2, N, BITS, "SHA256")
 
-		getRandomBytes(id)
-		getRandomBytes(pass)
+		RandomBytes(id)
+		RandomBytes(pass)
 		cli.SetIdentity(string(id), string(pass))
+
+		salt := GenerateSalt()
+		cli.SetSalt(salt)
 
 		v := cli.ComputeV()
                 srv.SetV(v)
@@ -94,6 +97,14 @@ func BenchmarkSrp6a(b *testing.B) {
 
 		S1 := cli.ComputeS()
 		S2 := srv.ComputeS()
+
+		if err := srv.Err(); err != nil {
+			b.Fatalf("srv error: %v", err)
+		}
+
+		if err := cli.Err(); err != nil {
+			b.Fatalf("cli error: %v", err)
+		}
 
 		if !bytes.Equal(S1, S2) {
 			fmt.Println("S1", hex.EncodeToString(S1))

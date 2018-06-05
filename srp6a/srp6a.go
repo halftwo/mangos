@@ -18,7 +18,7 @@ import (
 )
 
 const randomSize = 512/2/8
-const saltSize = 16
+const MinSaltSize = 16
 
 type srp6aBase struct {
 	err error
@@ -40,6 +40,15 @@ type srp6aBase struct {
 	_K []byte	// SHA1(PAD(S))
 }
 
+func GenerateSalt() []byte {
+	salt := make([]byte, MinSaltSize)
+	err := RandomBytes(salt)
+	if err != nil {
+		return nil
+	}
+	return salt
+}
+
 func padCopy(dst, src []byte) {
 	if len(dst) < len(src) {
 		panic("Can't reach here")
@@ -52,7 +61,7 @@ func padCopy(dst, src []byte) {
 	}
 }
 
-func genRandomBytes(buf []byte) error {
+func RandomBytes(buf []byte) error {
 	_, err := crand.Read(buf)
 	if err != nil {
 		return err
@@ -242,7 +251,7 @@ func (srv *Srp6aServer) GenerateB() []byte {
 	if len(srv._B) == 0 && srv.err == nil {
 		var buf [randomSize]byte
 		for len(srv._B) == 0 {
-			err := genRandomBytes(buf[:])
+			err := RandomBytes(buf[:])
 			if err != nil {
 				srv.err = err
 				return nil
@@ -347,22 +356,24 @@ func NewClient(g int, N []byte, bits int, hash string) *Srp6aClient {
 	return cli
 }
 
-func (cli *Srp6aClient) set_salt(salt []byte) {
-	cli.salt = make([]byte, len(salt))
-	copy(cli.salt, salt)
-}
-
 func (cli *Srp6aClient) SetIdentity(id string, pass string) {
 	cli.identity = id
 	cli.pass = pass
-	cli.salt = make([]byte, saltSize)
-	genRandomBytes(cli.salt)
+}
+
+func (cli *Srp6aClient) SetSalt(salt []byte) bool {
+	if len(cli.salt) == 0 && cli.err == nil {
+		cli.salt = make([]byte, len(salt))
+		copy(cli.salt, salt)
+		return true
+	}
+	return false
 }
 
 func (cli *Srp6aClient) compute_x() {
 	if cli.ix == nil && cli.err == nil {
 		if len(cli.identity) == 0 || len(cli.pass) == 0 || len(cli.salt) == 0 {
-			cli.err = fmt.Errorf("id or pass not set yet")
+			cli.err = fmt.Errorf("id, pass or salt not set yet")
 			return
 		}
 
@@ -412,7 +423,7 @@ func (cli *Srp6aClient) GenerateA() []byte {
 
 		var buf [randomSize]byte
 		for len(cli._A) == 0 {
-			err := genRandomBytes(buf[:])
+			err := RandomBytes(buf[:])
 			if err != nil {
 				cli.err = err
 				return nil
