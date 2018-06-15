@@ -69,12 +69,17 @@ func encode(alphabet []byte, out, in []byte) int {
 		c1 = 0
 		c2 = 0
 		c3 = 0
+		c4 = 0
 		var tmp [8]byte
 		var m int
 		switch i {
+		case 5:
+			c4 = in[4]
+			tmp[7] = alphabet[c4 & 0x1F]
+			fallthrough
 		case 4:
 			c3 = in[3]
-			tmp[6] = alphabet[(c3 << 3) & 0x1F]      /* C4 == 0 */
+			tmp[6] = alphabet[(c3 << 3 | c4 >> 5) & 0x1F]
 			tmp[5] = alphabet[(c3 >> 2) & 0x1F]
 			m += 2
 			fallthrough
