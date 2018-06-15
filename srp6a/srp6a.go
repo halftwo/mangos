@@ -70,8 +70,7 @@ func RandomBytes(buf []byte) error {
 }
 
 func isModZero(x *big.Int, m *big.Int) bool {
-	i := &big.Int{}
-	i.Mod(x, m)
+	i := new(big.Int).Mod(x, m)
 	return i.Sign() == 0
 }
 
@@ -103,14 +102,11 @@ func (b *srp6aBase) setParameter(g int, N []byte, bits int) {
 	b.bits = bits
 	b.byteLen = (bits + 7) / 8
 
-	b.ig = big.NewInt(int64(g))
-
-	b.iN = &big.Int{}
-	b.iN.SetBytes(N)
-
+	b.iN = new(big.Int).SetBytes(N)
 	b._N = make([]byte, b.byteLen)
 	padCopy(b._N, b.iN.Bytes())
 
+	b.ig = big.NewInt(int64(g))
 	b._g = make([]byte, b.byteLen)
 	padCopy(b._g, b.ig.Bytes())
 
@@ -119,8 +115,7 @@ func (b *srp6aBase) setParameter(g int, N []byte, bits int) {
 	b.hasher.Write(b._N)
 	b.hasher.Write(b._g)
 	buf := b.hasher.Sum(nil)
-	b.ik = &big.Int{}
-	b.ik.SetBytes(buf)
+	b.ik = new(big.Int).SetBytes(buf)
 }
 
 func (b *srp6aBase) Bits() int {
@@ -242,8 +237,7 @@ func NewServer(g int, N []byte, bits int, hash string) *Srp6aServer {
 
 func (srv *Srp6aServer) SetV(v []byte)  {
 	if srv.iv == nil && srv.err == nil {
-		srv.iv = &big.Int{}
-		srv.iv.SetBytes(v)
+		srv.iv = new(big.Int).SetBytes(v)
 	}
 }
 
@@ -272,15 +266,11 @@ func (srv *Srp6aServer) GenerateB() []byte {
 }
 
 func (srv *Srp6aServer) set_b(b []byte) []byte {
-	srv.ib = &big.Int{}
-	srv.ib.SetBytes(b)
+	srv.ib = new(big.Int).SetBytes(b)
 
 	// Compute: B = k*v + g^b % N
-	i1 := &big.Int{}
-	i1.Mul(srv.ik, srv.iv)
-
-	i2 := &big.Int{}
-	i2.Exp(srv.ig, srv.ib, srv.iN)
+	i1 := new(big.Int).Mul(srv.ik, srv.iv)
+	i2 := new(big.Int).Exp(srv.ig, srv.ib, srv.iN)
 
 	i1.Add(i1, i2)
 	i1.Mod(i1, srv.iN)
@@ -297,8 +287,7 @@ func (srv *Srp6aServer) SetA(A []byte) {
 		if len(A) > srv.byteLen {
 			srv.err = fmt.Errorf("Invalid A, too large")
 		} else {
-			srv.iA = &big.Int{}
-			srv.iA.SetBytes(A)
+			srv.iA = new(big.Int).SetBytes(A)
 			if isModZero(srv.iA, srv.iN) {
 				srv.err = fmt.Errorf("Invalid A, A%%N == 0")
 				return
@@ -324,11 +313,9 @@ func (srv *Srp6aServer) ComputeS() []byte {
 
 		// Compute: S_host = (A * v^u) ^ b % N
 		srv._S = make([]byte, srv.byteLen)
-		iu := &big.Int{}
-		iu.SetBytes(srv._u)
+		iu := new(big.Int).SetBytes(srv._u)
 
-		i1 := &big.Int{}
-		i1.Exp(srv.iv, iu, srv.iN)
+		i1 := new(big.Int).Exp(srv.iv, iu, srv.iN)
 		i1.Mul(srv.iA, i1)
 		i1.Mod(i1, srv.iN)
 		i1.Exp(i1, srv.ib, srv.iN)
@@ -378,7 +365,6 @@ func (cli *Srp6aClient) compute_x() {
 		}
 
 		// Compute: x = SHA1(salt | SHA1(Id | ":" | pass)) 
-		cli.ix = &big.Int{}
 		cli.hasher.Reset()
 		cli.hasher.Write([]byte(cli.identity))
 		cli.hasher.Write([]byte{':'})
@@ -389,7 +375,7 @@ func (cli *Srp6aClient) compute_x() {
 		cli.hasher.Write(cli.salt)
 		cli.hasher.Write(buf)
 		buf = cli.hasher.Sum(nil)
-		cli.ix.SetBytes(buf)
+		cli.ix = new(big.Int).SetBytes(buf)
 	}
 }
 
@@ -407,8 +393,7 @@ func (cli *Srp6aClient) ComputeV() []byte {
 
 		// Compute: v = g^x % N 
 		cli._v = make([]byte, cli.byteLen)
-		i1 := &big.Int{}
-		i1.Exp(cli.ig, cli.ix, cli.iN)
+		i1 := new(big.Int).Exp(cli.ig, cli.ix, cli.iN)
 		padCopy(cli._v, i1.Bytes())
 	}
 	return cli._v
@@ -435,12 +420,10 @@ func (cli *Srp6aClient) GenerateA() []byte {
 }
 
 func (cli *Srp6aClient) set_a(a []byte) []byte {
-	cli.ia = &big.Int{}
-	cli.ia.SetBytes(a)
+	cli.ia = new(big.Int).SetBytes(a)
 
 	// Compute: A = g^a % N 
-	i1 := &big.Int{}
-	i1.Exp(cli.ig, cli.ia, cli.iN)
+	i1 := new(big.Int).Exp(cli.ig, cli.ia, cli.iN)
 	if i1.Sign() == 0 {
 		return nil
 	}
@@ -454,8 +437,7 @@ func (cli *Srp6aClient) SetB(B []byte) {
 		if len(B) > cli.byteLen {
 			cli.err = fmt.Errorf("Invalid B, too large")
 		} else {
-			cli.iB = &big.Int{}
-			cli.iB.SetBytes(B)
+			cli.iB = new(big.Int).SetBytes(B)
 			if isModZero(cli.iB, cli.iN) {
 				cli.err = fmt.Errorf("Invalid B, B%%N == 0")
 				return
@@ -481,11 +463,9 @@ func (cli *Srp6aClient) ComputeS() []byte {
 
                 // Compute: S_user = (B - (k * g^x)) ^ (a + (u * x)) % N 
 		cli._S = make([]byte, cli.byteLen)
-		iu := &big.Int{}
-		iu.SetBytes(cli._u)
+		iu := new(big.Int).SetBytes(cli._u)
 
-		i1 := &big.Int{}
-		i1.Exp(cli.ig, cli.ix, cli.iN)
+		i1 := new(big.Int).Exp(cli.ig, cli.ix, cli.iN)
 		i1.Mul(cli.ik, i1)
 		i1.Mod(i1, cli.iN)
 		i1.Sub(cli.iB, i1)
@@ -493,8 +473,7 @@ func (cli *Srp6aClient) ComputeS() []byte {
 			i1.Add(i1, cli.iN)
 		}
 
-		i2 := &big.Int{}
-		i2.Mul(iu, cli.ix)
+		i2 := new(big.Int).Mul(iu, cli.ix)
 		i2.Add(cli.ia, i2)
 		i2.Mod(i2, cli.iN)
 
