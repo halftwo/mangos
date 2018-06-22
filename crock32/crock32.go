@@ -2,6 +2,8 @@
 // Douglas Crockford in http://www.crockford.com/wrmg/base32.html
 package crock32
 
+import "fmt"
+
 const AlphabetUpper = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 const AlphabetLower = "0123456789abcdefghjkmnpqrstvwxyz"
@@ -37,6 +39,20 @@ func EncodeLower(out []byte, in []byte) int {
 	return encode([]byte(AlphabetLower), out, in)
 }
 
+func EncodeToUpperString(in []byte) string {
+	n := EncodeLen(len(in))
+	buf := make([]byte, n)
+	EncodeUpper(buf, in)
+	return string(buf)
+}
+
+func EncodeToLowerString(in []byte) string {
+	n := EncodeLen(len(in))
+	buf := make([]byte, n)
+	EncodeLower(buf, in)
+	return string(buf)
+}
+
 func encode(alphabet []byte, out, in []byte) int {
 	var c0, c1, c2, c3, c4 byte
 	n := 0
@@ -66,6 +82,9 @@ func encode(alphabet []byte, out, in []byte) int {
 	}
 
 	if i > 0 && k > 0 {
+		if i > 5 {
+			i = 5
+		}
 		c1 = 0
 		c2 = 0
 		c3 = 0
@@ -123,6 +142,26 @@ func Decode(out []byte, in []byte) int {
 // It will treat 'i' 'l' as '1', 'o' as '0', all case-insensitive.
 func DecodeFuzzy(out []byte, in []byte) int {
 	return decode(out, in, true)
+}
+
+func DecodeString(s string) ([]byte, error) {
+	n := DecodeLen(len(s))
+	buf := make([]byte, n)
+	k := Decode(buf, []byte(s))
+	if k < 0 {
+		return nil, fmt.Errorf("decode error at %d", -(k + 1))
+	}
+	return buf[:k], nil
+}
+
+func DecodeFuzzyString(s string) ([]byte, error) {
+	n := DecodeLen(len(s))
+	buf := make([]byte, n)
+	k := DecodeFuzzy(buf, []byte(s))
+	if k < 0 {
+		return nil, fmt.Errorf("decode error at %d", -(k + 1))
+	}
+	return buf[:k], nil
 }
 
 func decode(out []byte, in []byte, fuzzy bool) int {
