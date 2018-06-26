@@ -6,7 +6,7 @@ import (
 	"crypto/aes"
 	crand "crypto/rand"
 
-	"mangos/eax"
+	"halftwo/mangos/eax"
 )
 
 type cipherSuite int

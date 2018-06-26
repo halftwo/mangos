@@ -60,7 +60,7 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 		}
 
 		cur := m.Type.In(1)
-		if cur.Name() != "Current" && cur.PkgPath() != "mangos/xic" {
+		if cur.Name() != "Current" && cur.PkgPath() != "halftwo/mangos/xic" {
 			return nil, fmt.Errorf("The first argument must be of type xic.Current instead of %s", cur.Name())
 		}
 

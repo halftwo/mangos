@@ -6,7 +6,7 @@ import (
 	"strings"
 	"strconv"
 
-	"mangos/xstr"
+	"halftwo/mangos/xstr"
 )
 
 

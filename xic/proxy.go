@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"strings"
 
-	"mangos/xstr"
+	"halftwo/mangos/xstr"
 )
 
 type stdProxy struct {

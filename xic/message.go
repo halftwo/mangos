@@ -5,7 +5,7 @@ import (
 	"math"
 	"bytes"
 
-	"mangos/vbs"
+	"halftwo/mangos/vbs"
 )
 
 type MsgType byte

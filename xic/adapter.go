@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"mangos/crock32"
+	"halftwo/mangos/crock32"
 )
 
 type adapterState int32

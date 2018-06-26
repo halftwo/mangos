@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"strings"
 
-	"mangos/eax"
+	"halftwo/mangos/eax"
 )
 
 func TestEAX(t *testing.T) {

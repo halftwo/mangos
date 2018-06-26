@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"math"
 
-	"mangos/vbs"
+	"halftwo/mangos/vbs"
 )
 
 type Arguments map[string]interface{}

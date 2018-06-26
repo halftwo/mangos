@@ -3,7 +3,7 @@ package dlog_test
 import (
 	"testing"
 
-	"mangos/dlog"
+	"halftwo/mangos/dlog"
 )
 
 func Test1(t *testing.T) {
