@@ -13,6 +13,7 @@ import (
 const multiplier = "kKMGTPEZY"
 const divider =     "munpfazy"
 
+// Multiplier return the factor that will multiply the original number
 func Multiplier(s string, binary bool) (uint64, int) {
 	m, n := MultiplierBigInt(s, binary)
 	if m.IsUint64() {
@@ -21,6 +22,7 @@ func Multiplier(s string, binary bool) (uint64, int) {
 	return 0, n	// Overflow
 }
 
+// Multiplier return the factor (in *big.Int) that will multiply the original number
 func MultiplierBigInt(s string, binary bool) (*big.Int, int) {
 	m := new(big.Int).SetUint64(1)
 	r, n := utf8.DecodeRuneInString(s)
@@ -54,6 +56,47 @@ func MultiplierBigInt(s string, binary bool) (*big.Int, int) {
 	return m, n
 }
 
+// ParseIntWithMultiplier return the multiplier-adjusted number
+func ParseIntWithMultiplier(s string, binary bool) (int64, int) {
+	x, n := ParseBigIntWithMultiplier(s, binary)
+	if x.IsInt64() {
+		return x.Int64(), n
+	}
+
+	return 0, n	// Overflow
+
+}
+
+// ParseBigIntWithMultiplier return the multiplier-adjusted number in *big.Int
+func ParseBigIntWithMultiplier(s string, binary bool) (*big.Int, int) {
+	i := strings.IndexFunc(s, func(x rune) bool {
+		return strings.IndexRune("0123456789-", x) < 0
+	})
+
+	x := new(big.Int)
+	if i == 0 {
+		return x, 0
+	}
+
+	number := s
+	if i > 0 {
+		number = s[:i]
+	}
+
+	if _, ok := x.SetString(number, 10); !ok {
+		panic("unitpref: (*big.Int).SetString() failed")
+	}
+
+	if i < len(s) {
+		m, n := MultiplierBigInt(s[i:], binary)
+		x.Mul(x, m)
+		i += n
+	}
+	return x, i
+}
+
+
+// Divider return the factor that will divide the original number
 func Divider(s string) (uint64, int) {
 	m, n := DividerBigInt(s)
 	if m.IsUint64() {
@@ -62,6 +105,7 @@ func Divider(s string) (uint64, int) {
 	return 0, n	// Overflow
 }
 
+// Divider return the factor (in *big.Int) that will divide the original number
 func DividerBigInt(s string) (*big.Int, int) {
 	m := new(big.Int).SetUint64(1)
 	r, n := utf8.DecodeRuneInString(s)

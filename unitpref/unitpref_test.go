@@ -2,6 +2,8 @@ package unitpref
 
 import (
 	"testing"
+	"math/big"
+	"fmt"
 )
 
 func TestUnitpref(t *testing.T) {
@@ -44,6 +46,20 @@ func TestUnitpref(t *testing.T) {
 				t.Fatalf("Overflow not detected")
 			}
 		}
+	}
+}
+
+
+func TestParse(t *testing.T) {
+	s := "123456789YiB"
+	x, _ := ParseBigIntWithMultiplier(s, true)
+	y, _ := new(big.Int).SetString("123456789", 10)
+	z := new(big.Int).Exp(new(big.Int).SetInt64(1024), new(big.Int).SetInt64(8), nil)
+	z.Mul(y, z)
+
+	if x.Cmp(z) != 0 {
+		fmt.Println(x, y)
+		t.Fatalf("ParseBigIntWithMultiplier() failed")
 	}
 }
 
