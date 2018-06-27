@@ -50,7 +50,7 @@ func TestUnitpref(t *testing.T) {
 }
 
 
-func TestParse(t *testing.T) {
+func TestParseInt(t *testing.T) {
 	s := "123456789YiB"
 	x, _ := ParseBigIntWithMultiplier(s, true)
 	y, _ := new(big.Int).SetString("123456789", 10)
@@ -58,8 +58,30 @@ func TestParse(t *testing.T) {
 	z.Mul(y, z)
 
 	if x.Cmp(z) != 0 {
-		fmt.Println(x, y)
+		fmt.Println(x, z)
 		t.Fatalf("ParseBigIntWithMultiplier() failed")
+	}
+}
+
+func TestParseRat(t *testing.T) {
+	{
+		a, _ := ParseBigRatWithMultiplier("12345.6789YiB", false)
+		b, _ := new(big.Rat).SetString("12345.6789e24")
+
+		if a.Cmp(b) != 0 {
+			fmt.Println(a, b)
+			t.Fatalf("ParseBigRatWithMultiplier() failed")
+		}
+	}
+
+	{
+		a, _ := ParseBigRatWithDivider("123456u")
+		b, _ := new(big.Rat).SetString("0.123456")
+
+		if a.Cmp(b) != 0 {
+			fmt.Println(a, b)
+			t.Fatalf("ParseBigRatWithDivider() failed")
+		}
 	}
 }
 

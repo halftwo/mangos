@@ -134,3 +134,66 @@ func DividerBigInt(s string) (*big.Int, int) {
 	return m, n
 }
 
+// ParseBigRatWithMultiplier return the multiplier-adjusted number in *big.Rat
+func ParseBigRatWithMultiplier(s string, binary bool) (*big.Rat, int) {
+	i := strings.IndexFunc(s, func(x rune) bool {
+		return strings.IndexRune("0123456789.-", x) < 0
+	})
+
+	x := new(big.Rat)
+	if i == 0 {
+		return x, 0
+	}
+
+	number := s
+	if i > 0 {
+		number = s[:i]
+	}
+
+	if _, ok := x.SetString(number); !ok {
+		panic("unitpref: (*big.Int).SetString() failed")
+	}
+
+	if i < len(s) {
+		m, n := MultiplierBigInt(s[i:], binary)
+		if n > 0 {
+			multi := new(big.Rat).SetInt(m)
+			x.Mul(x, multi)
+			i += n
+		}
+	}
+	return x, i
+}
+
+// ParseBigRatWithDivider return the divider-adjusted number in *big.Rat
+func ParseBigRatWithDivider(s string) (*big.Rat, int) {
+	i := strings.IndexFunc(s, func(x rune) bool {
+		return strings.IndexRune("0123456789.-", x) < 0
+	})
+
+	x := new(big.Rat)
+	if i == 0 {
+		return x, 0
+	}
+
+	number := s
+	if i > 0 {
+		number = s[:i]
+	}
+
+	if _, ok := x.SetString(number); !ok {
+		panic("unitpref: (*big.Int).SetString() failed")
+	}
+
+	if i < len(s) {
+		m, n := DividerBigInt(s[i:])
+		if n > 0 {
+			multi := new(big.Rat).SetInt(m)
+			multi.Inv(multi)
+			x.Mul(x, multi)
+			i += n
+		}
+	}
+	return x, i
+}
+
