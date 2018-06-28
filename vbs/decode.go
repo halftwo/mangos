@@ -810,18 +810,28 @@ func (dec *Decoder) decodeStructValue(v reflect.Value) {
 			break
 		}
 
-		name := dec.unpackString()
+		key := dec.decodeInterface()
 		if dec.err != nil {
-			break
+			return
 		}
 
-		f := fields.Find(name)
+		var f *vbsField
+		switch x := key.(type) {
+		case int64:
+			f = fields.FindInt(x)
+		case string:
+			f = fields.Find(x)
+		default:
+			dec.err = &InvalidUnmarshalError{reflect.TypeOf(x)}
+			return
+		}
+
 		if f == nil {
 			dec.decodeInterface()
 			continue
 		}
 
-		dec.decodeReflectValue(v.Field(f.Index))
+		dec.decodeReflectValue(v.Field(int(f.Index)))
 	}
 }
 

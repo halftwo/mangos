@@ -7,6 +7,9 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"strconv"
+	"math"
+	"fmt"
 )
 
 // tagOptions is the string following a comma in a struct field's "json"
@@ -62,7 +65,8 @@ func isValidTag(s string) bool {
 
 type vbsField struct {
 	Name      string
-	Index     int
+	IntName   uint32
+	Index     uint32
 	OmitEmpty bool
 }
 
@@ -89,8 +93,24 @@ func (p StructFields) Find(name string) *vbsField {
 	return &p[i]
 }
 
+func (p StructFields) FindInt(n int64) *vbsField {
+	if n > 0 && n <= math.MaxUint32 {
+		for i := 0; i < len(p); i++ {
+			f := &p[i]
+			if f.IntName == uint32(n) {
+				return f
+			}
+		}
+	}
+	return nil
+}
+
 func getStructFields(t reflect.Type) StructFields {
 	var fields []vbsField
+
+	if t.NumField() > math.MaxUint32 {
+		panic(fmt.Sprintf("vbs: too much fields in struct %v", t))
+	}
 
 	for i := 0; i < t.NumField(); i++ {
 		sf := t.Field(i)
@@ -113,11 +133,14 @@ func getStructFields(t reflect.Type) StructFields {
 			continue
 		}
 
+		iName := uint32(0)
 		if name == "" {
 			name = sf.Name
+		} else if n, err := strconv.ParseUint(name, 10, 32); err == nil && n > 0 {
+			iName = uint32(n)
 		}
 
-		vf := vbsField{Name:name, Index:i, OmitEmpty:opts.Contains("omitempty"),}
+		vf := vbsField{Name:name, IntName:iName, Index:uint32(i), OmitEmpty:opts.Contains("omitempty"),}
 		fields = append(fields, vf)
 	}
 	sort.Sort(StructFields(fields))

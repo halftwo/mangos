@@ -118,14 +118,27 @@ var st1 = struct {
 	Golf [4]byte
 }{1234567890, 0, "hello,world!", "你好，世界！", []byte{1,2,3,4,5,6,7}, -1.1, [4]byte{'a','b','c','d'},}
 
+var st2 = struct {
+	Alpha int	`vbs:"1"`
+	Bravo int	`vbs:"2,omitempty"`
+	Charlie string	`json:"3,omitempty"`
+	Delta string	`json:"4"`
+	Echo []byte	`vbs:"5"`
+	Foxtrot float64	`vbs:"6"`
+	Golf [4]byte	`vbs:"7"`
+}{st1.Alpha, st1.Bravo, st1.Charlie, st1.Delta, st1.Echo, st1.Foxtrot, st1.Golf}
+
 func TestMarshalStruct(t *testing.T) {
-	u := st1
-	testMarshal(t, u)
+	testMarshal(t, st1)
+	testMarshal(t, st2)
 }
 
-func BenchmarkStruct(b *testing.B) {
-	u := st1
-	benchmark(b, u)
+func BenchmarkStructNameKey(b *testing.B) {
+	benchmark(b, st1)
+}
+
+func BenchmarkStructIntKey(b *testing.B) {
+	benchmark(b, st2)
 }
 
 func testUnmarshalInterface(t *testing.T, u interface{}) {

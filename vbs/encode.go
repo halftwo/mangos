@@ -379,12 +379,16 @@ func (enc *Encoder) encodeStruct(v reflect.Value) {
 
 	fields := CachedStructFields(v.Type())
 	for _, f := range fields {
-		value := v.Field(f.Index)
+		value := v.Field(int(f.Index))
 		if f.OmitEmpty && IsEmptyValue(value) {
 			continue
 		}
 
-		enc.encodeString(f.Name)
+		if f.IntName == 0 {
+			enc.encodeString(f.Name)
+		} else {
+			enc.encodeInteger(int64(f.IntName))
+		}
 		enc.encodeReflectValue(value)
 		if enc.err != nil {
 			return
