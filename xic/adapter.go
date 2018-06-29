@@ -10,40 +10,40 @@ import (
 	"halftwo/mangos/crock32"
 )
 
-type adapterState int32
+type _AdapterState int32
 
 const (
-	adapter_INIT adapterState = iota
+	adapter_INIT _AdapterState = iota
 	adapter_ACTIVE
 	adapter_FINISHED
 )
 
-type stdAdapter struct {
-	engine *stdEngine
+type _Adapter struct {
+	engine *_Engine
 	name string
 	endpoints string
-	state adapterState
+	state _AdapterState
 
-	listeners []*stdListener
+	listeners []*_Listener
 	srvMap sync.Map
 	dftService atomic.Value
 }
 
-type stdListener struct {
-	adapter *stdAdapter
+type _Listener struct {
+	adapter *_Adapter
 	listener net.Listener
 }
 
-func newListener(adapter *stdAdapter, ei *EndpointInfo) (*stdListener, error) {
+func newListener(adapter *_Adapter, ei *EndpointInfo) (*_Listener, error) {
 	listener, err := net.Listen(ei.Proto(), ei.Address())
 	if err != nil {
 		return nil, err
 	}
-	l := &stdListener{adapter:adapter, listener:listener}
+	l := &_Listener{adapter:adapter, listener:listener}
 	return l, nil
 }
 
-func (l *stdListener) activate() {
+func (l *_Listener) activate() {
 	go func() {
 		for {
 			c, err := l.listener.Accept()
@@ -58,11 +58,11 @@ func (l *stdListener) activate() {
 	}()
 }
 
-func (l *stdListener) deactivate() {
+func (l *_Listener) deactivate() {
 	l.listener.Close()
 }
 
-func newAdapter(engine *stdEngine, name string, endpoints string) (*stdAdapter, error) {
+func newAdapter(engine *_Engine, name string, endpoints string) (*_Adapter, error) {
 	if name == "" {
 		uuid := GenerateRandomUuidBytes()
 		buf := make([]byte, 1 + crock32.EncodeLen(len(uuid)))
@@ -71,7 +71,7 @@ func newAdapter(engine *stdEngine, name string, endpoints string) (*stdAdapter, 
 		name = string(buf)
 	}
 
-	adapter := &stdAdapter{engine:engine, name:name}
+	adapter := &_Adapter{engine:engine, name:name}
 
 	eps := []string{}
 	for _, endpoint := range strings.Split(endpoints, "@") {
@@ -102,19 +102,19 @@ func newAdapter(engine *stdEngine, name string, endpoints string) (*stdAdapter, 
 	return adapter, nil
 }
 
-func (adp *stdAdapter) Engine() Engine {
+func (adp *_Adapter) Engine() Engine {
 	return adp.engine
 }
 
-func (adp *stdAdapter) Name() string {
+func (adp *_Adapter) Name() string {
 	return adp.name
 }
 
-func (adp *stdAdapter) Endpoints() string {
+func (adp *_Adapter) Endpoints() string {
 	return adp.endpoints
 }
 
-func (adp *stdAdapter) Activate() error {
+func (adp *_Adapter) Activate() error {
 	if !atomic.CompareAndSwapInt32((*int32)(&adp.state), int32(adapter_INIT), int32(adapter_ACTIVE)) {
 		return fmt.Errorf("Adapter(%s) already activated", adp.name)
 	}
@@ -125,7 +125,7 @@ func (adp *stdAdapter) Activate() error {
 	return nil
 }
 
-func (adp *stdAdapter) Deactivate() error {
+func (adp *_Adapter) Deactivate() error {
 	if !atomic.CompareAndSwapInt32((*int32)(&adp.state), int32(adapter_ACTIVE), int32(adapter_FINISHED)) {
 		return fmt.Errorf("Adapter(%s) not in active state", adp.name)
 	}
@@ -136,7 +136,7 @@ func (adp *stdAdapter) Deactivate() error {
 	return nil
 }
 
-func (adp *stdAdapter) AddServant(service string, servant Servant) (Proxy, error) {
+func (adp *_Adapter) AddServant(service string, servant Servant) (Proxy, error) {
 	si, err := getServantInfo(service, servant)
 	if err != nil {
 		return nil, err
@@ -151,11 +151,11 @@ func (adp *stdAdapter) AddServant(service string, servant Servant) (Proxy, error
 	return prx, nil
 }
 
-func (adp *stdAdapter) RemoveServant(service string) {
+func (adp *_Adapter) RemoveServant(service string) {
 	adp.srvMap.Delete(service)
 }
 
-func (adp *stdAdapter) FindServant(service string) *ServantInfo {
+func (adp *_Adapter) FindServant(service string) *ServantInfo {
 	srv, ok := adp.srvMap.Load(service)
 	if ok {
 		return srv.(*ServantInfo)
@@ -163,7 +163,7 @@ func (adp *stdAdapter) FindServant(service string) *ServantInfo {
 	return nil
 }
 
-func (adp *stdAdapter) DefaultServant() *ServantInfo {
+func (adp *_Adapter) DefaultServant() *ServantInfo {
 	srv := adp.dftService.Load()
 	if srv != nil {
 		return srv.(*ServantInfo)
@@ -171,7 +171,7 @@ func (adp *stdAdapter) DefaultServant() *ServantInfo {
 	return nil
 }
 
-func (adp *stdAdapter) SetDefaultServant(servant Servant) error {
+func (adp *_Adapter) SetDefaultServant(servant Servant) error {
 	si, err := getServantInfo("", servant)
 	if err != nil {
 		return err

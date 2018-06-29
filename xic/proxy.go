@@ -8,14 +8,14 @@ import (
 	"halftwo/mangos/xstr"
 )
 
-type stdProxy struct {
-	engine *stdEngine
+type _Proxy struct {
+	engine *_Engine
 	service string
 	str string
 	lb LoadBalance
 	fixed bool
 	ctx atomic.Value	// Context
-	cons []*stdConnection
+	cons []*_Connection
 	endpoints []string
 }
 
@@ -31,12 +31,12 @@ func (lb LoadBalance) String() string {
 	return ""
 }
 
-func newProxy(engine *stdEngine, proxy string) *stdProxy {
+func newProxy(engine *_Engine, proxy string) *_Proxy {
 	sp := xstr.NewSplitter(proxy, "@")
 	tk := xstr.NewTokenizerSpace(sp.Next())
 
 	service := tk.Next()
-	prx := &stdProxy{engine:engine, service:service}
+	prx := &_Proxy{engine:engine, service:service}
 	prx.ctx.Store(Context{})
 
 	for tk.HasMore() {
@@ -77,8 +77,8 @@ func newProxy(engine *stdEngine, proxy string) *stdProxy {
 	return prx
 }
 
-func newProxyConnection(engine *stdEngine, service string, con *stdConnection) *stdProxy {
-	prx := &stdProxy{engine:engine, service:service, str:service}
+func newProxyConnection(engine *_Engine, service string, con *_Connection) *_Proxy {
+	prx := &_Proxy{engine:engine, service:service, str:service}
 	prx.ctx.Store(Context{})
 	if con != nil {
 		prx.fixed = true
@@ -87,58 +87,58 @@ func newProxyConnection(engine *stdEngine, service string, con *stdConnection) *
 	return prx
 }
 
-func (prx *stdProxy) Engine() Engine {
+func (prx *_Proxy) Engine() Engine {
 	return prx.engine
 }
 
-func (prx *stdProxy) Service() string {
+func (prx *_Proxy) Service() string {
 	return prx.service
 }
 
-func (prx *stdProxy) String() string {
+func (prx *_Proxy) String() string {
 	return prx.str
 }
 
-func (prx *stdProxy) Context() Context {
+func (prx *_Proxy) Context() Context {
 	ctx := prx.ctx.Load().(Context)
 	return ctx
 }
 
-func (prx *stdProxy) SetContext(ctx Context) {
+func (prx *_Proxy) SetContext(ctx Context) {
 	if ctx != nil {
 		prx.ctx.Store(ctx)
 	}
 }
 
-func (prx *stdProxy) Connection() Connection {
+func (prx *_Proxy) Connection() Connection {
 	// TODO
 	var con Connection
 	return con
 }
 
-func (prx *stdProxy) ResetConnection() {
+func (prx *_Proxy) ResetConnection() {
 	for _, c := range prx.cons {
 		c.Close(false)
 	}
 	prx.cons = prx.cons[:0]
 }
 
-func (prx *stdProxy) LoadBalance() LoadBalance {
+func (prx *_Proxy) LoadBalance() LoadBalance {
 	return prx.lb
 }
 
-func (prx *stdProxy) TimedProxy(timeout, closeTimeout, connectTimeout int) Proxy {
+func (prx *_Proxy) TimedProxy(timeout, closeTimeout, connectTimeout int) Proxy {
 	// TODO
 	var prx2 Proxy
 	return prx2
 }
 
 
-func (prx *stdProxy) pickConnection(q *outQuest) (*stdConnection, error) {
+func (prx *_Proxy) pickConnection(q *_OutQuest) (*_Connection, error) {
 	// TODO
 
 	if len(prx.cons) == 0 {
-		var con *stdConnection
+		var con *_Connection
 		for _, ep := range prx.endpoints {
 			con = prx.engine.makeConnection(prx.service, ep)
 			if con != nil {
@@ -153,11 +153,11 @@ func (prx *stdProxy) pickConnection(q *outQuest) (*stdConnection, error) {
 	return prx.cons[0], nil
 }
 
-func (prx *stdProxy) Invoke(method string, in interface{}, out interface{}) error {
+func (prx *_Proxy) Invoke(method string, in interface{}, out interface{}) error {
 	return prx.InvokeCtx(prx.Context(), method, in, out)
 }
 
-func (prx *stdProxy) InvokeCtx(ctx Context, method string, in interface{}, out interface{}) error {
+func (prx *_Proxy) InvokeCtx(ctx Context, method string, in interface{}, out interface{}) error {
 	ivk := prx.InvokeCtxAsync(ctx, method, in, out, nil)
 	select {
 	case <-ivk.Done:
@@ -165,11 +165,11 @@ func (prx *stdProxy) InvokeCtx(ctx Context, method string, in interface{}, out i
 	return ivk.Err
 }
 
-func (prx *stdProxy) InvokeOneway(method string, in interface{}) error {
+func (prx *_Proxy) InvokeOneway(method string, in interface{}) error {
 	return prx.InvokeCtxOneway(prx.Context(), method, in)
 }
 
-func (prx *stdProxy) InvokeCtxOneway(ctx Context, method string, in interface{}) error {
+func (prx *_Proxy) InvokeCtxOneway(ctx Context, method string, in interface{}) error {
 	q := newOutQuest(0, prx.service, method, ctx, in)
 	con, err := prx.pickConnection(q)
 	if err != nil {
@@ -180,11 +180,11 @@ func (prx *stdProxy) InvokeCtxOneway(ctx Context, method string, in interface{})
 	return nil
 }
 
-func (prx *stdProxy) InvokeAsync(method string, in interface{}, out interface{}, done chan *Invoking) *Invoking {
+func (prx *_Proxy) InvokeAsync(method string, in interface{}, out interface{}, done chan *Invoking) *Invoking {
 	return prx.InvokeCtxAsync(prx.Context(), method, in, out, done)
 }
 
-func (prx *stdProxy) InvokeCtxAsync(ctx Context, method string, in interface{}, out interface{}, done chan *Invoking) *Invoking {
+func (prx *_Proxy) InvokeCtxAsync(ctx Context, method string, in interface{}, out interface{}, done chan *Invoking) *Invoking {
 	if done == nil {
 		done = make(chan *Invoking, 1)
 	} else if cap(done) == 0 {

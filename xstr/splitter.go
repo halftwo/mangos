@@ -14,29 +14,29 @@ type Splitter interface {
 	Count() int
 }
 
-type indexFunction func(string) (idx int, n int)
+type _IndexFunction func(string) (idx int, n int)
 
-// strSplitter implements Splitter interface
-type strSplitter struct {
+// _StrSplitter implements Splitter interface
+type _StrSplitter struct {
 	remain string
 	count int
 	done bool
-	iFun indexFunction
+	iFun _IndexFunction
 }
 
-func (sp *strSplitter) Count() int {
+func (sp *_StrSplitter) Count() int {
 	return sp.count
 }
 
-func (sp *strSplitter) HasMore() bool {
+func (sp *_StrSplitter) HasMore() bool {
 	return !sp.done
 }
 
-func (sp *strSplitter) Remain() string {
+func (sp *_StrSplitter) Remain() string {
 	return sp.remain
 }
 
-func (sp *strSplitter) Next() string {
+func (sp *_StrSplitter) Next() string {
 	if sp.done {
 		return ""
 	}
@@ -63,7 +63,7 @@ func emptySepIndexFun(s string) (int, int) {
 	return n, 0
 }
 
-func makeIndexFunSeparator(sep string) indexFunction {
+func makeIndexFunSeparator(sep string) _IndexFunction {
 	if len(sep) == 0 {
 		return emptySepIndexFun
 	}
@@ -77,7 +77,7 @@ func makeIndexFunSeparator(sep string) indexFunction {
 	}
 }
 
-func makeIndexFunAny(chars string) indexFunction {
+func makeIndexFunAny(chars string) _IndexFunction {
 	if len(chars) == 0 {
 		return emptySepIndexFun
 	}
@@ -92,7 +92,7 @@ func makeIndexFunAny(chars string) indexFunction {
 	}
 }
 
-func makeIndexFunPredicate(f func(rune) bool) indexFunction {
+func makeIndexFunPredicate(f func(rune) bool) _IndexFunction {
 	return func(s string) (int, int) {
 		for i, r := range s {
 			if f(r) {
@@ -106,19 +106,19 @@ func makeIndexFunPredicate(f func(rune) bool) indexFunction {
 
 func NewSplitter(s string, sep string) Splitter {
 	fn := makeIndexFunSeparator(sep)
-	sp := &strSplitter{remain:s, iFun:fn}
+	sp := &_StrSplitter{remain:s, iFun:fn}
 	return sp
 }
 
 func NewSplitterAny(s string, chars string) Splitter {
 	fn := makeIndexFunAny(chars)
-	sp := &strSplitter{remain:s, iFun:fn}
+	sp := &_StrSplitter{remain:s, iFun:fn}
 	return sp
 }
 
 func NewSplitterFunc(s string, f func(rune) bool) Splitter {
 	fn := makeIndexFunPredicate(f)
-	sp := &strSplitter{remain:s, iFun:fn}
+	sp := &_StrSplitter{remain:s, iFun:fn}
 	return sp
 }
 
@@ -128,15 +128,15 @@ func NewSplitterSpace(s string) Splitter {
 
 
 
-// strTokenizer implements Splitter interface
+// _StrTokenizer implements Splitter interface
 // Two or more contiguous delimiter chars are considered to be one single delimiter.
-type strTokenizer struct {
-	strSplitter
+type _StrTokenizer struct {
+	_StrSplitter
 	i int
 	n int
 }
 
-func (tk *strTokenizer) prepare() {
+func (tk *_StrTokenizer) prepare() {
 	for {
 		i, n := tk.iFun(tk.remain)
 		if i != 0 {
@@ -152,7 +152,7 @@ func (tk *strTokenizer) prepare() {
 	}
 }
 
-func (tk *strTokenizer) Next() string {
+func (tk *_StrTokenizer) Next() string {
 	if tk.done {
 		return ""
 	}
@@ -171,8 +171,8 @@ func (tk *strTokenizer) Next() string {
 	return token
 }
 
-func newTokenizer(s string, fn indexFunction) Splitter {
-	tk := &strTokenizer{strSplitter{remain:s, iFun:fn}, 0, 0}
+func newTokenizer(s string, fn _IndexFunction) *_StrTokenizer {
+	tk := &_StrTokenizer{_StrSplitter{remain:s, iFun:fn}, 0, 0}
 	tk.prepare()
 	return tk
 }

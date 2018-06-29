@@ -22,7 +22,7 @@ const record_HEAD_SIZE	= 16
 const record_BIG_ENDIAN = 0x08
 
 // little endian byte order
-type recordHead struct {
+type _RecordHead struct {
 	size uint16	// include the size itself and trailing '\0' 
 	ttev byte	// truncated:1, type:3, bigendian:1, version:3
 	locusEnd uint8
@@ -31,7 +31,7 @@ type recordHead struct {
 	usec int64
 }
 
-type recordMan struct {
+type _RecordMan struct {
 	pid uint16
 	ttev byte
 	locusEnd uint8
@@ -43,7 +43,7 @@ type recordMan struct {
 var recPool = sync.Pool{
 	New: func() interface{} {
 		pid := uint16(os.Getpid())
-		r := new(recordMan)
+		r := new(_RecordMan)
 		r.pid = pid
 		r.ttev = (record_TYPE_RAW << 4) | record_BIG_ENDIAN | (record_VERSION)
 		r.buf[6] = byte(pid >> 8)
@@ -52,7 +52,7 @@ var recPool = sync.Pool{
 	},
 }
 
-func (rec *recordMan) Reset() {
+func (rec *_RecordMan) Reset() {
 	rec.off = record_HEAD_SIZE
 	rec.locusEnd = 0
 	rec.size = 0
@@ -65,7 +65,7 @@ const (
 	LOCUS_MAX       = 127
 )
 
-func (rec *recordMan) SetIdentityTagLocus(identity, tag, locus string) {
+func (rec *_RecordMan) SetIdentityTagLocus(identity, tag, locus string) {
 	rec.putMax(identity, IDENTITY_MAX)
 	rec.WriteByte(' ')
 	rec.putMax(tag, TAG_MAX)
@@ -75,7 +75,7 @@ func (rec *recordMan) SetIdentityTagLocus(identity, tag, locus string) {
 	rec.WriteByte(' ')
 }
 
-func (rec *recordMan) putMax(s string, max int) {
+func (rec *_RecordMan) putMax(s string, max int) {
 	k := len(s)
 	if k > max {
 		k = max
@@ -93,7 +93,7 @@ func (rec *recordMan) putMax(s string, max int) {
 	rec.off += k
 }
 
-func (rec *recordMan) Write(buf []byte) (int, error) {
+func (rec *_RecordMan) Write(buf []byte) (int, error) {
 	if rec.off < len(rec.buf) {
 		copy(rec.buf[rec.off:], buf)
 	}
@@ -102,7 +102,7 @@ func (rec *recordMan) Write(buf []byte) (int, error) {
 	return k, nil
 }
 
-func (rec *recordMan) WriteByte(b byte) error {
+func (rec *_RecordMan) WriteByte(b byte) error {
 	if rec.off < len(rec.buf) {
 		rec.buf[rec.off] = b
 	}
@@ -110,7 +110,7 @@ func (rec *recordMan) WriteByte(b byte) error {
 	return nil
 }
 
-func (rec *recordMan) Bytes() []byte {
+func (rec *_RecordMan) Bytes() []byte {
 	if rec.size > 0 {
 		return rec.buf[:rec.size]
 	}
@@ -144,14 +144,14 @@ func (rec *recordMan) Bytes() []byte {
 	return rec.buf[:size]
 }
 
-func (rec *recordMan) BodyBytes() []byte {
+func (rec *_RecordMan) BodyBytes() []byte {
 	if rec.size == 0 {
 		rec.Bytes()
 	}
 	return rec.buf[record_HEAD_SIZE:rec.size]
 }
 
-func (rec *recordMan) Truncated() bool {
+func (rec *_RecordMan) Truncated() bool {
 	return rec.off >= len(rec.buf)
 }
 
@@ -224,7 +224,7 @@ func (lg *Dlogger) Log(tag string, format string, a ...interface{}) {
 	lg.XLog(lg.identity, tag, locus, format, a...)
 }
 
-func (lg *Dlogger) printStderr(rec *recordMan) {
+func (lg *Dlogger) printStderr(rec *_RecordMan) {
 	now := time.Now()
 	ts := now.Format("060102-150405")
 	fmt.Fprintf(os.Stderr, "%s :: %d+%d %s\n", ts, rec.pid, 0, rec.BodyBytes())
@@ -233,7 +233,7 @@ func (lg *Dlogger) printStderr(rec *recordMan) {
 // XLog send a dlog to dlogd. 
 // identity and locus are also specified in the arguments.
 func (lg *Dlogger) XLog(identity string, tag string, locus string, format string, a ...interface{}) {
-	rec := recPool.Get().(*recordMan)
+	rec := recPool.Get().(*_RecordMan)
 	defer recPool.Put(rec)
 
 	rec.Reset()

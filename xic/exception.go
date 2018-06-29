@@ -14,7 +14,7 @@ const (
 	// TODO
 )
 
-type stdException struct {
+type _Exception struct {
 	name string
 	code int
 	tag string
@@ -24,64 +24,64 @@ type stdException struct {
 	what string
 }
 
-func newEx(name string, code int, tag string, msg string) *stdException {
+func newEx(name string, code int, tag string, msg string) *_Exception {
 	_, file, line, _ := runtime.Caller(2)
-	ex := &stdException{name:name, file:file, line:line, code:code, tag:tag, msg:msg}
+	ex := &_Exception{name:name, file:file, line:line, code:code, tag:tag, msg:msg}
 	return ex
 }
 
-func NewException(name string, msg string) *stdException {
+func NewException(name string, msg string) *_Exception {
 	return newEx(name, 0, "", msg)
 }
 
-func NewExceptionCode(name string, code int, msg string) *stdException {
+func NewExceptionCode(name string, code int, msg string) *_Exception {
 	return newEx(name, code, "", msg)
 }
 
-func NewExceptionCodeTag(name string, code int, tag string, msg string) *stdException {
+func NewExceptionCodeTag(name string, code int, tag string, msg string) *_Exception {
 	return newEx(name, code, tag, msg)
 }
 
-func NewExceptionf(name string, format string, a...interface{}) *stdException {
+func NewExceptionf(name string, format string, a...interface{}) *_Exception {
 	msg := fmt.Sprintf(format, a...)
 	return newEx(name, 0, "", msg)
 }
 
-func NewExceptionCodef(name string, code int, format string, a...interface{}) *stdException {
+func NewExceptionCodef(name string, code int, format string, a...interface{}) *_Exception {
 	msg := fmt.Sprintf(format, a...)
 	return newEx(name, code, "", msg)
 }
 
-func NewExceptionCodeTagf(name string, code int, tag string, format string, a...interface{}) *stdException {
+func NewExceptionCodeTagf(name string, code int, tag string, format string, a...interface{}) *_Exception {
 	msg := fmt.Sprintf(format, a...)
 	return newEx(name, code, tag, msg)
 }
 
-func (ex *stdException) Exname() string {
+func (ex *_Exception) Exname() string {
 	return ex.name
 }
 
-func (ex *stdException) File() string {
+func (ex *_Exception) File() string {
 	return ex.file
 }
 
-func (ex *stdException) Line() int {
+func (ex *_Exception) Line() int {
 	return ex.line
 }
 
-func (ex *stdException) Code() int {
+func (ex *_Exception) Code() int {
 	return ex.code
 }
 
-func (ex *stdException) Tag() string {
+func (ex *_Exception) Tag() string {
 	return ex.tag
 }
 
-func (ex *stdException) Message() string {
+func (ex *_Exception) Message() string {
 	return ex.msg
 }
 
-func (ex *stdException) Error() string {
+func (ex *_Exception) Error() string {
 	if ex.what == "" {
 		w := &strings.Builder{}
 		w.WriteString(ex.name)

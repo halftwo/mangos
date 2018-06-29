@@ -25,19 +25,19 @@ type Carp interface {
 }
 
 
-type item struct {
+type _Item struct {
 	hash uint64
 	factor float64
 }
 
-type stdCarp struct {
+type _Carp struct {
 	weighted bool
 	combine CombineFunction
-	items []item
+	items []_Item
 }
 
 
-func newCarp(members []uint64, combine CombineFunction) *stdCarp {
+func newCarp(members []uint64, combine CombineFunction) *_Carp {
 	if len(members) == 0 {
 		panic("Slice members can't have length 0")
 	}
@@ -45,11 +45,11 @@ func newCarp(members []uint64, combine CombineFunction) *stdCarp {
 		combine = myCombine
 	}
 
-	items := make([]item, 0, len(members))
+	items := make([]_Item, 0, len(members))
 	for _, m := range members {
-		items = append(items, item{m, 1})
+		items = append(items, _Item{m, 1})
 	}
-	cp := &stdCarp{combine:combine, items:items}
+	cp := &_Carp{combine:combine, items:items}
 	return cp
 }
 
@@ -140,12 +140,12 @@ func myCombine(m uint64, k uint32) uint32 {
 }
 
 // Count return number of members
-func (cp *stdCarp) Count() int {
+func (cp *_Carp) Count() int {
 	return len(cp.items)
 }
 
 // Which return the index of the choosed member which has the maxium return value of the combine function.
-func (cp *stdCarp) Which(key uint32) int {
+func (cp *_Carp) Which(key uint32) int {
 	idx := 0
 	if cp.weighted {
                 max := 0.0
@@ -171,44 +171,44 @@ func (cp *stdCarp) Which(key uint32) int {
 	return idx
 }
 
-type valueSeqs struct {
+type _ValueSeqs struct {
 	n int
-	items []vsItem
+	items []_VsItem
 }
 
-type vsItem struct {
+type _VsItem struct {
 	v float64
 	s int
 }
 
-func (o *valueSeqs) Len() int {
+func (o *_ValueSeqs) Len() int {
 	return o.n
 }
 
-func (o *valueSeqs) Less(i, j int) bool {
+func (o *_ValueSeqs) Less(i, j int) bool {
 	a := &o.items[i]
 	b := &o.items[j]
 	return (a.v < b.v || (a.v == b.v && a.s < b.s))
 }
 
-func (o *valueSeqs) Swap(i, j int) {
+func (o *_ValueSeqs) Swap(i, j int) {
 	o.items[i], o.items[j] = o.items[j], o.items[i]
 }
 
-func (o *valueSeqs) Push(x interface{}) {
-	z := x.(vsItem)
+func (o *_ValueSeqs) Push(x interface{}) {
+	z := x.(_VsItem)
 	o.items[o.n] = z
 	o.n++
 }
 
-func (o *valueSeqs) Pop() interface{} {
+func (o *_ValueSeqs) Pop() interface{} {
 	o.n--
 	return o.items[o.n]
 }
 
 
 // Sequence return the sequence of members' indexes with the maxium return values of the combine function.
-func (cp *stdCarp) Sequence(key uint32, seqs []int) []int {
+func (cp *_Carp) Sequence(key uint32, seqs []int) []int {
 	if len(seqs) == 0 {
 		return seqs
 	}
@@ -216,12 +216,12 @@ func (cp *stdCarp) Sequence(key uint32, seqs []int) []int {
 		seqs = seqs[:len(cp.items)]
 	}
 
-	vs := &valueSeqs{n:0, items:make([]vsItem, len(seqs))}
+	vs := &_ValueSeqs{n:0, items:make([]_VsItem, len(seqs))}
 	i := 0
 	for ; i < len(seqs); i++ {
 		it := &cp.items[i]
 		x := it.factor * float64(cp.combine(it.hash, key))
-		heap.Push(vs, vsItem{x, i})
+		heap.Push(vs, _VsItem{x, i})
 	}
 	for ; i < len(cp.items); i++ {
 		it := &cp.items[i]
@@ -234,7 +234,7 @@ func (cp *stdCarp) Sequence(key uint32, seqs []int) []int {
 	}
 
 	for i := len(seqs) - 1; i >= 0; i-- {
-		z := heap.Pop(vs).(vsItem)
+		z := heap.Pop(vs).(_VsItem)
 		seqs[i] = z.s
 	}
 

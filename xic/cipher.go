@@ -9,10 +9,10 @@ import (
 	"halftwo/mangos/eax"
 )
 
-type cipherSuite int
+type _CipherSuite int
 
 const (
-	UNKNOWN_SUITE cipherSuite  = iota
+	UNKNOWN_SUITE _CipherSuite  = iota
 	CLEARTEXT
 	AES128_EAX
 	AES192_EAX
@@ -20,7 +20,7 @@ const (
 	MAX_SUITE
 )
 
-func (c cipherSuite) String() string {
+func (c _CipherSuite) String() string {
 	switch c {
 	case UNKNOWN_SUITE:
 		return "UNKNOWN"
@@ -45,7 +45,7 @@ func (c cipherSuite) String() string {
 */
 
 
-type xicCipher struct {
+type _Cipher struct {
 	rOff int	// RANDOM offset in nonce
 	cOff int	// COUNTER offset in nonce
 
@@ -61,7 +61,7 @@ type xicCipher struct {
 
 
 
-func newXicCipher(suite cipherSuite, keyInfo []byte, isServer bool) (*xicCipher, error) {
+func newXicCipher(suite _CipherSuite, keyInfo []byte, isServer bool) (*_Cipher, error) {
 	keyLen := 0
 	switch suite {
 	case AES128_EAX:
@@ -74,7 +74,7 @@ func newXicCipher(suite cipherSuite, keyInfo []byte, isServer bool) (*xicCipher,
                 return nil, fmt.Errorf("Unsupported CipherSuite %s", suite)
 	}
 
-	c := &xicCipher{}
+	c := &_Cipher{}
 
 	n := len(keyInfo) - keyLen
 	if n > 16 {
@@ -135,7 +135,7 @@ func getRandomBytes(buf []byte) error {
 	return err
 }
 
-func (c *xicCipher) OutputGetIV(IV []byte) bool {
+func (c *_Cipher) OutputGetIV(IV []byte) bool {
 	if !increaseCounter(c.oNonce[c.cOff:]) {
 		return false
 	}
@@ -148,21 +148,21 @@ func (c *xicCipher) OutputGetIV(IV []byte) bool {
 	return true
 }
 
-func (c *xicCipher) OutputStart(header []byte) {
+func (c *_Cipher) OutputStart(header []byte) {
 	c.ox.Start(true, c.oNonce, header)
 }
 
-func (c *xicCipher) OutputUpdate(out, in []byte) {
+func (c *_Cipher) OutputUpdate(out, in []byte) {
 	c.ox.Update(out, in)
 }
 
-func (c *xicCipher) OutputMakeMAC() []byte {
+func (c *_Cipher) OutputMakeMAC() []byte {
 	c.ox.Finish(c.oMAC[:])
 	return c.oMAC[:]
 }
 
 
-func (c *xicCipher) InputSetIV(IV []byte) bool {
+func (c *_Cipher) InputSetIV(IV []byte) bool {
 	if !increaseCounter(c.iNonce[c.cOff:]) {
 		return false
 	}
@@ -175,15 +175,15 @@ func (c *xicCipher) InputSetIV(IV []byte) bool {
 	return true
 }
 
-func (c *xicCipher) InputStart(header []byte) {
+func (c *_Cipher) InputStart(header []byte) {
 	c.ix.Start(false, c.iNonce, header)
 }
 
-func (c *xicCipher) InputUpdate(out, in []byte) {
+func (c *_Cipher) InputUpdate(out, in []byte) {
 	c.ix.Update(out, in)
 }
 
-func (c *xicCipher) InputCheckMAC(MAC []byte) bool {
+func (c *_Cipher) InputCheckMAC(MAC []byte) bool {
 	var mac [16]byte
 	c.ix.Finish(mac[:])
 	return bytes.Equal(MAC, mac[:])

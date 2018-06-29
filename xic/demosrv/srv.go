@@ -3,46 +3,46 @@ package main
 import (
 	"fmt"
 	"time"
-	"mangos/xic"
+	"halftwo/mangos/xic"
 )
 
-type demoServant struct {
+type _DemoServant struct {
 	xic.DefaultServant
 	adapter xic.Adapter
 }
 
-func newServant(adapter xic.Adapter) *demoServant {
+func newServant(adapter xic.Adapter) *_DemoServant {
 	setting := adapter.Engine().Setting()
 	name := setting.Get("demo.name")
 
-	srv := &demoServant{adapter:adapter}
+	srv := &_DemoServant{adapter:adapter}
 	if name != "" {
 		adapter.AddServant(name, srv)
 	}
 	return srv
 }
 
-func (srv *demoServant) Xic_echo(cur xic.Current, in xic.Arguments, out *xic.Arguments) error {
+func (srv *_DemoServant) Xic_echo(cur xic.Current, in xic.Arguments, out *xic.Arguments) error {
 	out.CopyFrom(in)
 	return nil
 }
 
-type timeInArgs struct {
+type _TimeInArgs struct {
 	Time int64 `vbs:"time,omitempty"`
 }
 
-type times struct {
+type _Times struct {
 	Utc string `vbs:"utc"`
 	Local string `vbs:"local"`
 }
 
-type timeOutArgs struct {
+type _TimeOutArgs struct {
 	Con string `vbs:"con"`
 	Time int64 `vbs:"time"`
-	Strftime times `vbs:"strftime"`
+	Strftime _Times `vbs:"strftime"`
 }
 
-func (srv *demoServant) Xic_time(cur xic.Current, in timeInArgs, out *timeOutArgs) error {
+func (srv *_DemoServant) Xic_time(cur xic.Current, in _TimeInArgs, out *_TimeOutArgs) error {
 	var t time.Time
 	if in.Time == 0 {
 		t = time.Now()

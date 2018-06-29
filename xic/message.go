@@ -20,7 +20,7 @@ const (
 
 const headerSize = 8
 
-type xicMessageHeader struct {
+type _MessageHeader struct {
 	Magic byte	// 'X'
 	Version byte	// '!'
 	Type byte	// 'Q', 'A', 'H', 'B', 'C'
@@ -28,17 +28,17 @@ type xicMessageHeader struct {
 	BodySize int32	// in big endian byte order
 }
 
-type xicMessage interface {
+type _Message interface {
 	Type() MsgType
 }
 
-type xicOutMessage interface {
-	xicMessage
+type _OutMessage interface {
+	_Message
 	Bytes() []byte
 }
 
-type xicInMessage interface {
-	xicMessage
+type _InMessage interface {
+	_Message
 	Args() Arguments
 }
 
@@ -61,42 +61,42 @@ func fillHeader(packet []byte, t MsgType) {
 	packet[7] = byte(size)
 }
 
-var theHelloMessage = stdHelloMessage{}
-var theByeMessage = stdByeMessage{}
+var theHelloMessage = _HelloMessage{}
+var theByeMessage = _ByeMessage{}
 
 
-type stdHelloMessage struct {
+type _HelloMessage struct {
 }
 
-func (m stdHelloMessage) Type() MsgType {
+func (m _HelloMessage) Type() MsgType {
 	return 'H'
 }
 
 var helloMessageBytes = [8]byte{'X','!','H'}
 
-func (m stdHelloMessage) Bytes() []byte {
+func (m _HelloMessage) Bytes() []byte {
 	return helloMessageBytes[:]
 }
 
 
-type stdByeMessage struct {
+type _ByeMessage struct {
 }
 
-func (m stdByeMessage) Type() MsgType {
+func (m _ByeMessage) Type() MsgType {
 	return 'B'
 }
 
 var byeMessageBytes = [8]byte{'X','!','B'}
 
-func (m stdByeMessage) Bytes() []byte {
+func (m _ByeMessage) Bytes() []byte {
 	return byeMessageBytes[:]
 }
 
-type outCheck struct {
+type _OutCheck struct {
 	buf []byte
 }
 
-func newOutCheck(cmd string, args interface{}) *outCheck {
+func newOutCheck(cmd string, args interface{}) *_OutCheck {
 	b := &bytes.Buffer{}
 	enc := vbs.NewEncoder(b)
 	b.Write(commonHeaderBytes[:])
@@ -105,29 +105,29 @@ func newOutCheck(cmd string, args interface{}) *outCheck {
 	if err != nil {
 		panic("vbs.Encoder error")
 	}
-	c := &outCheck{buf:b.Bytes()}
+	c := &_OutCheck{buf:b.Bytes()}
 	fillHeader(c.buf, 'C')
 	return c
 }
 
-func (c *outCheck) Type() MsgType {
+func (c *_OutCheck) Type() MsgType {
 	return 'C'
 }
 
-func (c *outCheck) Bytes() []byte {
+func (c *_OutCheck) Bytes() []byte {
 	return c.buf
 }
 
 
-type outQuest struct {
+type _OutQuest struct {
 	txid int64
 	reserved int
 	start int
 	buf []byte
 }
 
-func newOutQuest(txid int64, service, method string, ctx Context, args interface{}) *outQuest {
-	q := &outQuest{txid:txid, start:-1}
+func newOutQuest(txid int64, service, method string, ctx Context, args interface{}) *_OutQuest {
+	q := &_OutQuest{txid:txid, start:-1}
 	b := &bytes.Buffer{}
 	enc := vbs.NewEncoder(b)
 	b.Write(commonHeaderBytes[:])
@@ -145,11 +145,11 @@ func newOutQuest(txid int64, service, method string, ctx Context, args interface
 	return q
 }
 
-func (q *outQuest) Type() MsgType {
+func (q *_OutQuest) Type() MsgType {
 	return 'Q'
 }
 
-func (q *outQuest) Bytes() []byte {
+func (q *_OutQuest) Bytes() []byte {
 	if q.start < 0 {
 		if q.txid < 0 {
 			panic("txid not set yet")
@@ -165,22 +165,22 @@ func (q *outQuest) Bytes() []byte {
 	return q.buf[q.start:]
 }
 
-func (q *outQuest) SetTxid(txid int64) {
+func (q *_OutQuest) SetTxid(txid int64) {
 	if q.txid != 0 {
 		q.txid = txid
 		q.start = -1
 	}
 }
 
-type outAnswer struct {
+type _OutAnswer struct {
 	txid int64
 	reserved int
 	start int
 	buf []byte
 }
 
-func newOutAnswer(status int, args interface{}) *outAnswer {
-	a := &outAnswer{txid:-1, start:-1}
+func newOutAnswer(status int, args interface{}) *_OutAnswer {
+	a := &_OutAnswer{txid:-1, start:-1}
 	b := &bytes.Buffer{}
 	enc := vbs.NewEncoder(b)
 	b.Write(commonHeaderBytes[:])
@@ -196,19 +196,19 @@ func newOutAnswer(status int, args interface{}) *outAnswer {
 	return a
 }
 
-func newOutAnswerNormal(args interface{}) *outAnswer {
+func newOutAnswerNormal(args interface{}) *_OutAnswer {
 	return newOutAnswer(0, args)
 }
 
-func newOutAnswerExceptional(args interface{}) *outAnswer {
+func newOutAnswerExceptional(args interface{}) *_OutAnswer {
 	return newOutAnswer(-1, args)
 }
 
-func (a *outAnswer) Type() MsgType {
+func (a *_OutAnswer) Type() MsgType {
 	return 'A'
 }
 
-func (a *outAnswer) Bytes() []byte {
+func (a *_OutAnswer) Bytes() []byte {
 	if a.start < 0 {
 		if a.txid < 0 {
 			panic("txid not set yet")
@@ -224,19 +224,19 @@ func (a *outAnswer) Bytes() []byte {
 	return a.buf[a.start:]
 }
 
-func (a *outAnswer) SetTxid(txid int64) {
+func (a *_OutAnswer) SetTxid(txid int64) {
 	if a.txid != 0 {
 		a.txid = txid
 		a.start = -1
 	}
 }
 
-type inMsg struct {
+type _InMsg struct {
 	argsOff int
 	buf []byte
 }
 
-func (m *inMsg) DecodeArgs(args interface{}) error {
+func (m *_InMsg) DecodeArgs(args interface{}) error {
 	dec := vbs.NewDecoderBytes(m.buf[m.argsOff:])
 	err := dec.Decode(args)
 	if err != nil {
@@ -247,13 +247,13 @@ func (m *inMsg) DecodeArgs(args interface{}) error {
 	return nil
 }
 
-type inCheck struct {
+type _InCheck struct {
 	cmd string
-	inMsg
+	_InMsg
 }
 
-func newInCheck(buf []byte) *inCheck {
-	c := &inCheck{}
+func newInCheck(buf []byte) *_InCheck {
+	c := &_InCheck{}
 	dec := vbs.NewDecoderBytes(buf)
 	dec.Decode(&c.cmd)
 	c.argsOff = dec.Consumed()
@@ -261,20 +261,20 @@ func newInCheck(buf []byte) *inCheck {
 	return c
 }
 
-func (q *inCheck) Type() MsgType {
+func (q *_InCheck) Type() MsgType {
 	return 'C'
 }
 
-type inQuest struct {
+type _InQuest struct {
 	txid int64
 	service string
 	method string
 	ctx Context
-	inMsg
+	_InMsg
 }
 
-func newInQuest(buf []byte) *inQuest {
-	q := &inQuest{}
+func newInQuest(buf []byte) *_InQuest {
+	q := &_InQuest{}
 	dec := vbs.NewDecoderBytes(buf)
 	dec.Decode(&q.txid)
 	dec.Decode(&q.service)
@@ -285,18 +285,18 @@ func newInQuest(buf []byte) *inQuest {
 	return q
 }
 
-func (q *inQuest) Type() MsgType {
+func (q *_InQuest) Type() MsgType {
 	return 'Q'
 }
 
-type inAnswer struct {
+type _InAnswer struct {
 	txid int64
 	status int
-	inMsg
+	_InMsg
 }
 
-func newInAnswer(buf []byte) *inAnswer {
-	a := &inAnswer{}
+func newInAnswer(buf []byte) *_InAnswer {
+	a := &_InAnswer{}
 	dec := vbs.NewDecoderBytes(buf)
 	dec.Decode(&a.txid)
 	dec.Decode(&a.status)
@@ -305,11 +305,11 @@ func newInAnswer(buf []byte) *inAnswer {
 	return a
 }
 
-func (a *inAnswer) Type() MsgType {
+func (a *_InAnswer) Type() MsgType {
 	return 'A'
 }
 
-func DecodeMessage(header xicMessageHeader, buf []byte) (xicMessage, error) {
+func DecodeMessage(header _MessageHeader, buf []byte) (_Message, error) {
 	if header.Magic != 'X' || header.Version != '!' {
 		return nil, fmt.Errorf("Unknown message Magic(%d) and Version(%d)", header.Magic, header.Version)
 	}
@@ -319,7 +319,7 @@ func DecodeMessage(header xicMessageHeader, buf []byte) (xicMessage, error) {
 		}
 	}
 
-	var msg xicMessage
+	var msg _Message
 	switch header.Type {
 	case 'H':
 		msg = theHelloMessage

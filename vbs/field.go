@@ -12,23 +12,23 @@ import (
 	"fmt"
 )
 
-// tagOptions is the string following a comma in a struct field's "json"
+// _TagOptions is the string following a comma in a struct field's "json"
 // tag, or the empty string. It does not include the leading comma.
-type tagOptions string
+type _TagOptions string
 
 // parseTag splits a struct field's json tag into its name and
 // comma-separated options.
-func parseTag(tag string) (string, tagOptions) {
+func parseTag(tag string) (string, _TagOptions) {
 	if idx := strings.Index(tag, ","); idx != -1 {
-		return tag[:idx], tagOptions(tag[idx+1:])
+		return tag[:idx], _TagOptions(tag[idx+1:])
 	}
-	return tag, tagOptions("")
+	return tag, _TagOptions("")
 }
 
 // Contains reports whether a comma-separated list of options
 // contains a particular substr flag. substr must be surrounded by a
 // string boundary or commas.   
-func (o tagOptions) Contains(optionName string) bool {
+func (o _TagOptions) Contains(optionName string) bool {
 	if len(o) == 0 {
 		return false
 	}
@@ -63,20 +63,20 @@ func isValidTag(s string) bool {
 	return true
 }
 
-type vbsField struct {
+type _FieldInfo struct {
 	Name      string
+	Index     int
 	IntName   uint32
-	Index     uint32
 	OmitEmpty bool
 }
 
-type StructFields []vbsField
+type StructFields []_FieldInfo
 
 func (p StructFields) Len() int           { return len(p) }
 func (p StructFields) Less(i, j int) bool { return p[i].Name < p[j].Name }
 func (p StructFields) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
-func (p StructFields) Find(name string) *vbsField {
+func (p StructFields) Find(name string) *_FieldInfo {
 	i, j := 0, len(p)
 	for i < j {
 		m := int(uint(i+j) >> 1) // avoid overflow
@@ -93,7 +93,7 @@ func (p StructFields) Find(name string) *vbsField {
 	return &p[i]
 }
 
-func (p StructFields) FindInt(n int64) *vbsField {
+func (p StructFields) FindInt(n int64) *_FieldInfo {
 	if n > 0 && n <= math.MaxUint32 {
 		for i := 0; i < len(p); i++ {
 			f := &p[i]
@@ -106,7 +106,7 @@ func (p StructFields) FindInt(n int64) *vbsField {
 }
 
 func getStructFields(t reflect.Type) StructFields {
-	var fields []vbsField
+	var fields []_FieldInfo
 
 	if t.NumField() > math.MaxUint32 {
 		panic(fmt.Sprintf("vbs: too much fields in struct %v", t))
@@ -140,7 +140,7 @@ func getStructFields(t reflect.Type) StructFields {
 			iName = uint32(n)
 		}
 
-		vf := vbsField{Name:name, IntName:iName, Index:uint32(i), OmitEmpty:opts.Contains("omitempty"),}
+		vf := _FieldInfo{Name:name, IntName:iName, Index:i, OmitEmpty:opts.Contains("omitempty"),}
 		fields = append(fields, vf)
 	}
 	sort.Sort(StructFields(fields))
@@ -148,13 +148,13 @@ func getStructFields(t reflect.Type) StructFields {
 }
 
 var fieldCache struct {
-	value atomic.Value // map[reflect.Type][]vbsField
+	value atomic.Value // map[reflect.Type][]_FieldInfo
 	mutex sync.Mutex   // used only by writers
 }
 
 // CachedStructFields is like getStructFields but uses a cache to avoid repeated work.
 func CachedStructFields(t reflect.Type) StructFields {
-	m, _ := fieldCache.value.Load().(map[reflect.Type][]vbsField)
+	m, _ := fieldCache.value.Load().(map[reflect.Type][]_FieldInfo)
 	f := m[t]
 	if f != nil {
 		return f
@@ -164,12 +164,12 @@ func CachedStructFields(t reflect.Type) StructFields {
 	// Might duplicate effort but won't hold other computations back.
 	f = getStructFields(t)
 	if f == nil {
-		f = []vbsField{}
+		f = []_FieldInfo{}
 	}
 
 	fieldCache.mutex.Lock()
-	m, _ = fieldCache.value.Load().(map[reflect.Type][]vbsField)
-	newM := make(map[reflect.Type][]vbsField, len(m)+1)
+	m, _ = fieldCache.value.Load().(map[reflect.Type][]_FieldInfo)
+	newM := make(map[reflect.Type][]_FieldInfo, len(m)+1)
 	for k, v := range m {
 		newM[k] = v
 	}

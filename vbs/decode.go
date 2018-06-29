@@ -243,7 +243,7 @@ func (dec *Decoder) decodeReflectValue(v reflect.Value) {
 	}
 	*/
 
-	var decode decodeFunc
+	var decode _DecodeFunc
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		decode = (*Decoder).decodeIntValue
@@ -361,13 +361,13 @@ func bitmapTestMulti(x uint8) bool {
 	return (bitmapMulti[x>>3] & (1 << (x & 0x1F))) != 0
 }
 
-type vbsHead struct {
+type _HeadInfo struct {
 	kind Kind
 	descriptor uint16
 	num int64
 }
 
-func (dec *Decoder) unpackHeadKind(kind Kind, permitDescriptor bool) (head vbsHead) {
+func (dec *Decoder) unpackHeadKind(kind Kind, permitDescriptor bool) (head _HeadInfo) {
 	head = dec.unpackHead()
 	if dec.err == nil {
 		if head.kind != kind {
@@ -379,7 +379,7 @@ func (dec *Decoder) unpackHeadKind(kind Kind, permitDescriptor bool) (head vbsHe
 	return
 }
 
-func (dec *Decoder) unpackHead() (head vbsHead) {
+func (dec *Decoder) unpackHead() (head _HeadInfo) {
 	if dec.err != nil {
 		return
 	}
@@ -531,7 +531,7 @@ again:
 	return
 }
 
-func (dec *Decoder) unpackHeadOfList() (head vbsHead) {
+func (dec *Decoder) unpackHeadOfList() (head _HeadInfo) {
 	head = dec.unpackHeadKind(VBS_LIST, true)
 	if dec.err == nil {
 		dec.depth++
@@ -542,7 +542,7 @@ func (dec *Decoder) unpackHeadOfList() (head vbsHead) {
 	return
 }
 
-func (dec *Decoder) unpackHeadOfDict() (head vbsHead) {
+func (dec *Decoder) unpackHeadOfDict() (head _HeadInfo) {
 	head = dec.unpackHeadKind(VBS_DICT, true)
 	if dec.err == nil {
 		dec.depth++
@@ -573,7 +573,7 @@ func (dec *Decoder) unpackIfTail() bool {
 	return false
 }
 
-type decodeFunc func (dec *Decoder, v reflect.Value)
+type _DecodeFunc func (dec *Decoder, v reflect.Value)
 
 func (dec *Decoder) decodeIntValue(v reflect.Value) {
 	head := dec.unpackHeadKind(VBS_INTEGER, true)
@@ -815,7 +815,7 @@ func (dec *Decoder) decodeStructValue(v reflect.Value) {
 			return
 		}
 
-		var f *vbsField
+		var f *_FieldInfo
 		switch x := key.(type) {
 		case int64:
 			f = fields.FindInt(x)

@@ -10,13 +10,13 @@ import (
 	"strconv"
 )
 
-type stdSetting struct {
+type _Setting struct {
 	filename string
 	m sync.Map
 }
 
 func NewSetting() Setting {
-	return &stdSetting{}
+	return &_Setting{}
 }
 
 func NewSettingFile(filename string) (Setting, error) {
@@ -28,7 +28,7 @@ func NewSettingFile(filename string) (Setting, error) {
 	return st, nil
 }
 
-func (st *stdSetting) LoadFile(filename string) error {
+func (st *_Setting) LoadFile(filename string) error {
 	fp, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -63,30 +63,30 @@ func (st *stdSetting) LoadFile(filename string) error {
 	return nil
 }
 
-func (st *stdSetting) Set(name string, value string) {
+func (st *_Setting) Set(name string, value string) {
 	st.m.Store(name, value)
 }
 
-func (st *stdSetting) Remove(name string) {
+func (st *_Setting) Remove(name string) {
 	st.m.Delete(name)
 }
 
-func (st *stdSetting) Insert(name string, value string) bool {
+func (st *_Setting) Insert(name string, value string) bool {
 	_, loaded := st.m.LoadOrStore(name, value)
 	return !loaded
 }
 
 
-func (st *stdSetting) Has(name string) bool {
+func (st *_Setting) Has(name string) bool {
 	_, ok := st.m.Load(name)
 	return ok
 }
 
-func (st *stdSetting) Get(name string) string {
+func (st *_Setting) Get(name string) string {
 	return st.GetDefault(name, "")
 }
 
-func (st *stdSetting) GetDefault(name string, dft string) string {
+func (st *_Setting) GetDefault(name string, dft string) string {
 	v, ok := st.m.Load(name)
 	if ok {
 		s := v.(string)
@@ -97,11 +97,11 @@ func (st *stdSetting) GetDefault(name string, dft string) string {
 	return dft
 }
 
-func (st *stdSetting) Int(name string) int64 {
+func (st *_Setting) Int(name string) int64 {
 	return st.IntDefault(name, 0)
 }
 
-func (st *stdSetting) IntDefault(name string, dft int64) int64 {
+func (st *_Setting) IntDefault(name string, dft int64) int64 {
 	s := st.Get(name)
 	v, err := strconv.ParseInt(s, 0, 64)
 	if err != nil {
@@ -110,11 +110,11 @@ func (st *stdSetting) IntDefault(name string, dft int64) int64 {
 	return v
 }
 
-func (st *stdSetting) Bool(name string) bool {
+func (st *_Setting) Bool(name string) bool {
 	return st.BoolDefault(name, false)
 }
 
-func (st *stdSetting) BoolDefault(name string, dft bool) bool {
+func (st *_Setting) BoolDefault(name string, dft bool) bool {
 	s := st.Get(name)
 	v, err := strconv.ParseBool(s)
 	if err != nil {
@@ -123,11 +123,11 @@ func (st *stdSetting) BoolDefault(name string, dft bool) bool {
 	return v
 }
 
-func (st *stdSetting) Float(name string) float64 {
+func (st *_Setting) Float(name string) float64 {
 	return st.FloatDefault(name, 0)
 }
 
-func (st *stdSetting) FloatDefault(name string, dft float64) float64 {
+func (st *_Setting) FloatDefault(name string, dft float64) float64 {
 	s := st.Get(name)
 	v, err := strconv.ParseFloat(s, 64)
 	if err != nil {
@@ -136,7 +136,7 @@ func (st *stdSetting) FloatDefault(name string, dft float64) float64 {
 	return v
 }
 
-func (st *stdSetting) Pathname(name string) string {
+func (st *_Setting) Pathname(name string) string {
 	s := st.Get(name)
 	if len(s) == 0 || s[0] == '/' {
 		return s
@@ -145,7 +145,7 @@ func (st *stdSetting) Pathname(name string) string {
 	return path.Join(path.Dir(st.filename), s)
 }
 
-func (st *stdSetting) PathnameDefault(name string, dft string) string {
+func (st *_Setting) PathnameDefault(name string, dft string) string {
 	s := st.GetDefault(name, dft)
 	if len(s) == 0 || s[0] == '/' {
 		return s
@@ -154,7 +154,7 @@ func (st *stdSetting) PathnameDefault(name string, dft string) string {
 	return path.Join(path.Dir(st.filename), s)
 }
 
-func (st *stdSetting) StringSlice(name string) []string {
+func (st *_Setting) StringSlice(name string) []string {
 	s := st.Get(name)
 	var array []string
 	for {

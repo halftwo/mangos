@@ -20,7 +20,7 @@ import (
 const randomSize = 512/2/8
 const MinSaltSize = 16
 
-type srp6aBase struct {
+type _Srp6aBase struct {
 	err error
 	hashName string
 	hasher hash.Hash
@@ -74,11 +74,11 @@ func isModZero(x *big.Int, m *big.Int) bool {
 	return i.Sign() == 0
 }
 
-func (b *srp6aBase) Err() error {
+func (b *_Srp6aBase) Err() error {
 	return b.err
 }
 
-func (b *srp6aBase) setHash(hash string) {
+func (b *_Srp6aBase) setHash(hash string) {
 	if strings.EqualFold(hash, "SHA1") {
 		b.hashName = "SHA1"
 		b.hasher = sha1.New()
@@ -90,7 +90,7 @@ func (b *srp6aBase) setHash(hash string) {
 	}
 }
 
-func (b *srp6aBase) setParameter(g int, N []byte, bits int) {
+func (b *_Srp6aBase) setParameter(g int, N []byte, bits int) {
 	if b.err != nil {
 		return
 	}
@@ -118,15 +118,15 @@ func (b *srp6aBase) setParameter(g int, N []byte, bits int) {
 	b.ik = new(big.Int).SetBytes(buf)
 }
 
-func (b *srp6aBase) Bits() int {
+func (b *_Srp6aBase) Bits() int {
 	return b.bits
 }
 
-func (b *srp6aBase) G() []byte {
+func (b *_Srp6aBase) G() []byte {
 	return b._g
 }
 
-func (b *srp6aBase) N() []byte {
+func (b *_Srp6aBase) N() []byte {
 	return b._N
 }
 
@@ -149,7 +149,7 @@ func computeU(hasher hash.Hash, bufLen int, A, B []byte) []byte {
 	return nil
 }
 
-func (b *srp6aBase) compute_u() {
+func (b *_Srp6aBase) compute_u() {
 	if len(b._u) == 0 && b.err == nil {
 		if len(b._A) == 0 || len(b._B) == 0 {
 			b.err = fmt.Errorf("A or B not set yet")
@@ -163,7 +163,7 @@ func (b *srp6aBase) compute_u() {
 	}
 }
 
-func (b *srp6aBase) ComputeM1() []byte {
+func (b *_Srp6aBase) ComputeM1() []byte {
 	if len(b._M1) == 0 && b.err == nil {
 		if len(b._A) == 0 || len(b._B) == 0 {
 			b.err = fmt.Errorf("A or B is not set yet")
@@ -186,7 +186,7 @@ func (b *srp6aBase) ComputeM1() []byte {
 	return b._M1
 }
 
-func (b *srp6aBase) ComputeM2() []byte {
+func (b *_Srp6aBase) ComputeM2() []byte {
 	if len(b._M2) == 0 && b.err == nil {
                 b.ComputeM1()
 		if b.err != nil {
@@ -204,7 +204,7 @@ func (b *srp6aBase) ComputeM2() []byte {
 	return b._M2
 }
 
-func (b *srp6aBase) ComputeK() []byte {
+func (b *_Srp6aBase) ComputeK() []byte {
 	if len(b._K) == 0 && b.err == nil {
 		if len(b._S) == 0 {
 			b.err = fmt.Errorf("S must be computed before K")
@@ -222,7 +222,7 @@ func (b *srp6aBase) ComputeK() []byte {
 
 
 type Srp6aServer struct {
-	srp6aBase
+	_Srp6aBase
 	iv *big.Int
         ib *big.Int
 	iA *big.Int
@@ -326,7 +326,7 @@ func (srv *Srp6aServer) ComputeS() []byte {
 
 
 type Srp6aClient struct {
-	srp6aBase
+	_Srp6aBase
 	identity string
 	pass string
 	salt []byte

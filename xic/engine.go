@@ -5,55 +5,55 @@ import (
 	"sync"
 )
 
-type stdEngine struct {
+type _Engine struct {
 	mutex sync.Mutex
 	setting Setting
 	name string
 	uuid string
 
-	adapterMap map[string]*stdAdapter
-	proxyMap map[string]*stdProxy
-	outConMap map[string]*stdConnection
-	inConList []*stdConnection
+	adapterMap map[string]*_Adapter
+	proxyMap map[string]*_Proxy
+	outConMap map[string]*_Connection
+	inConList []*_Connection
 	done chan struct{}
 }
 
-func newEngine() *stdEngine {
+func newEngine() *_Engine {
 	return newEngineSettingName(NewSetting(), "")
 }
 
-func newEngineSetting(setting Setting) *stdEngine {
+func newEngineSetting(setting Setting) *_Engine {
 	return newEngineSettingName(setting, "")
 }
 
-func newEngineSettingName(setting Setting, name string) *stdEngine {
+func newEngineSettingName(setting Setting, name string) *_Engine {
 	// TODO
 	uuid := GenerateRandomUuid()
 	done := make(chan struct{}, 1)
-	engine := &stdEngine{setting:setting, name:name, uuid:uuid, done:done}
-	engine.adapterMap = make(map[string]*stdAdapter)
-	engine.proxyMap = make(map[string]*stdProxy)
-	engine.outConMap = make(map[string]*stdConnection)
+	engine := &_Engine{setting:setting, name:name, uuid:uuid, done:done}
+	engine.adapterMap = make(map[string]*_Adapter)
+	engine.proxyMap = make(map[string]*_Proxy)
+	engine.outConMap = make(map[string]*_Connection)
 	return engine
 }
 
-func (engine *stdEngine) Setting() Setting {
+func (engine *_Engine) Setting() Setting {
 	return engine.setting
 }
 
-func (engine *stdEngine) Name() string {
+func (engine *_Engine) Name() string {
 	return engine.name
 }
 
-func (engine *stdEngine) Uuid() string {
+func (engine *_Engine) Uuid() string {
 	return engine.uuid
 }
 
-func (engine *stdEngine) CreateAdapter(name string) (Adapter, error) {
+func (engine *_Engine) CreateAdapter(name string) (Adapter, error) {
 	return engine.CreateAdapterEndpoints(name, "")
 }
 
-func (engine *stdEngine) CreateAdapterEndpoints(name string, endpoints string) (Adapter, error) {
+func (engine *_Engine) CreateAdapterEndpoints(name string, endpoints string) (Adapter, error) {
 	// TODO
 	if name == "" {
 		name = "xic"
@@ -78,7 +78,7 @@ func (engine *stdEngine) CreateAdapterEndpoints(name string, endpoints string) (
 	return adapter, nil
 }
 
-func (engine *stdEngine) CreateSlackAdapter() (Adapter, error) {
+func (engine *_Engine) CreateSlackAdapter() (Adapter, error) {
 	adapter, err := newAdapter(engine, "", "")
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (engine *stdEngine) CreateSlackAdapter() (Adapter, error) {
 	return adapter, nil
 }
 
-func addAdapter(engine *stdEngine, adapter *stdAdapter) error {
+func addAdapter(engine *_Engine, adapter *_Adapter) error {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
 	_, ok := engine.adapterMap[adapter.Name()]
@@ -102,7 +102,7 @@ func addAdapter(engine *stdEngine, adapter *stdAdapter) error {
 	return nil
 }
 
-func (engine *stdEngine) StringToProxy(proxy string) (Proxy, error) {
+func (engine *_Engine) StringToProxy(proxy string) (Proxy, error) {
 	prx, ok := engine.proxyMap[proxy]
 	if ok {
 		return prx, nil
@@ -113,7 +113,7 @@ func (engine *stdEngine) StringToProxy(proxy string) (Proxy, error) {
 	return prx, nil
 }
 
-func (engine *stdEngine) Shutdown() {
+func (engine *_Engine) Shutdown() {
 	// TODO
 	inConList := engine.inConList
 	engine.inConList = nil
@@ -129,7 +129,7 @@ func (engine *stdEngine) Shutdown() {
 	close(engine.done)
 }
 
-func (engine *stdEngine) WaitForShutdown() {
+func (engine *_Engine) WaitForShutdown() {
 	// TODO
 
 	select {
@@ -137,7 +137,7 @@ func (engine *stdEngine) WaitForShutdown() {
 	}
 }
 
-func (engine *stdEngine) makeFixedProxy(service string, con *stdConnection) (Proxy, error) {
+func (engine *_Engine) makeFixedProxy(service string, con *_Connection) (Proxy, error) {
 	prx, ok := engine.proxyMap[service]
 	if ok {
 		if prx.Connection() == con {
@@ -150,7 +150,7 @@ func (engine *stdEngine) makeFixedProxy(service string, con *stdConnection) (Pro
 	return prx, nil
 }
 
-func (engine *stdEngine) makeConnection(serviceHint string, endpoint string) *stdConnection {
+func (engine *_Engine) makeConnection(serviceHint string, endpoint string) *_Connection {
 	con, ok := engine.outConMap[endpoint]
 	if ok {
 		if con.IsLive() {
@@ -166,7 +166,7 @@ func (engine *stdEngine) makeConnection(serviceHint string, endpoint string) *st
 	return con
 }
 
-func (engine *stdEngine) incomingConnection(con *stdConnection) {
+func (engine *_Engine) incomingConnection(con *_Connection) {
 	engine.inConList = append(engine.inConList, con)
 }
 

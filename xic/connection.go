@@ -14,33 +14,33 @@ import (
 	"halftwo/mangos/dlog"
 )
 
-type stdCurrent struct {
-	inQuest
-	con *stdConnection
+type _Current struct {
+	_InQuest
+	con *_Connection
 	args Arguments
 }
 
-func newCurrent(con *stdConnection, q *inQuest) *stdCurrent {
-	return &stdCurrent{inQuest:*q, con:con}
+func newCurrent(con *_Connection, q *_InQuest) *_Current {
+	return &_Current{_InQuest:*q, con:con}
 }
 
-func (cur *stdCurrent) Txid() int64 {
+func (cur *_Current) Txid() int64 {
 	return cur.txid
 }
 
-func (cur *stdCurrent) Service() string {
+func (cur *_Current) Service() string {
 	return cur.service
 }
 
-func (cur *stdCurrent) Method() string {
+func (cur *_Current) Method() string {
 	return cur.method
 }
 
-func (cur *stdCurrent) Ctx() Context {
+func (cur *_Current) Ctx() Context {
 	return cur.ctx
 }
 
-func (cur *stdCurrent) Args() Arguments {
+func (cur *_Current) Args() Arguments {
 	if cur.args == nil {
 		cur.args = NewArguments()
 		cur.DecodeArgs(cur.args)
@@ -48,14 +48,14 @@ func (cur *stdCurrent) Args() Arguments {
 	return cur.args
 }
 
-func (cur *stdCurrent) Con() Connection {
+func (cur *_Current) Con() Connection {
 	return cur.con
 }
 
 
-type conState int32
+type _ConState int32
 const (
-	con_INIT conState = iota
+	con_INIT _ConState = iota
 	con_WAITING_HELLO	// client waiting for server hello message
 	con_ACTIVE
 	con_CLOSE		// Close is called
@@ -64,10 +64,10 @@ const (
 	con_ERROR
 )
 
-type stdConnection struct {
+type _Connection struct {
 	c net.Conn
-	state conState
-	engine *stdEngine
+	state _ConState
+	engine *_Engine
 	adapter atomic.Value	// Adapter
 	serviceHint string
 	incoming bool
@@ -79,7 +79,7 @@ type stdConnection struct {
 	mutex sync.Mutex
 }
 
-func newOutgoingConnection(engine *stdEngine, serviceHint string, endpoint string) *stdConnection {
+func newOutgoingConnection(engine *_Engine, serviceHint string, endpoint string) *_Connection {
 	ei, err := parseEndpoint(endpoint)
 	if err != nil {
 		return nil
@@ -89,41 +89,41 @@ func newOutgoingConnection(engine *stdEngine, serviceHint string, endpoint strin
 	if err != nil {
 		return nil
 	}
-	con := &stdConnection{engine:engine, c:c, incoming:false, serviceHint:serviceHint, pending:make(map[int64]*Invoking)}
+	con := &_Connection{engine:engine, c:c, incoming:false, serviceHint:serviceHint, pending:make(map[int64]*Invoking)}
 	return con
 }
 
-func newIncomingConnection(adapter *stdAdapter, c net.Conn) *stdConnection {
+func newIncomingConnection(adapter *_Adapter, c net.Conn) *_Connection {
 	engine := adapter.engine
-	con := &stdConnection{engine:engine, c:c, incoming:true}
+	con := &_Connection{engine:engine, c:c, incoming:true}
 	con.adapter.Store(adapter)
 	engine.incomingConnection(con)
 	return con
 }
 
-func (con *stdConnection) String() string {
+func (con *_Connection) String() string {
 	laddr := con.c.LocalAddr()
 	return fmt.Sprintf("%s/%s/%s", laddr.Network(), laddr.String(), con.c.RemoteAddr().String())
 }
 
-func (con *stdConnection) IsLive() bool {
-	state := conState(atomic.LoadInt32((*int32)(&con.state)))
+func (con *_Connection) IsLive() bool {
+	state := _ConState(atomic.LoadInt32((*int32)(&con.state)))
 	return state < con_CLOSE
 }
 
-func (con *stdConnection) Incoming() bool {
+func (con *_Connection) Incoming() bool {
 	return con.incoming
 }
 
-func (con *stdConnection) Timeout() int {
+func (con *_Connection) Timeout() int {
 	return con.timeout
 }
 
-func (con *stdConnection) Endpoint() string {
+func (con *_Connection) Endpoint() string {
 	return con.endpoint
 }
 
-func (con *stdConnection) Close(force bool) {
+func (con *_Connection) Close(force bool) {
 	// TODO
 	if force {
 		con.shut()
@@ -138,7 +138,7 @@ func (con *stdConnection) Close(force bool) {
 	}
 }
 
-func (con *stdConnection) CreateProxy(service string) (Proxy, error) {
+func (con *_Connection) CreateProxy(service string) (Proxy, error) {
 	if strings.IndexByte(service, '@') >= 0 {
 		return nil, errors.New("Service name can't contain '@'")
 	}
@@ -150,7 +150,7 @@ func (con *stdConnection) CreateProxy(service string) (Proxy, error) {
 }
 
 
-func (con *stdConnection) Adapter() Adapter {
+func (con *_Connection) Adapter() Adapter {
 	a := con.adapter.Load()
 	if a != nil {
 		return a.(Adapter)
@@ -158,19 +158,19 @@ func (con *stdConnection) Adapter() Adapter {
 	return nil
 }
 
-func (con *stdConnection) SetAdapter(adapter Adapter) {
+func (con *_Connection) SetAdapter(adapter Adapter) {
 	con.mutex.Lock()
 	con.adapter.Store(adapter)
 	con.mutex.Unlock()
 }
 
-func (con *stdConnection) sendMessage(msg xicOutMessage) error {
+func (con *_Connection) sendMessage(msg _OutMessage) error {
 	buf := msg.Bytes()
 	_, err := con.c.Write(buf)
 	return err
 }
 
-func (con *stdConnection) generateTxid() int64 {
+func (con *_Connection) generateTxid() int64 {
 	con.lastTxid++
 	if con.lastTxid < 0 {
 		con.lastTxid = 1
@@ -179,7 +179,7 @@ func (con *stdConnection) generateTxid() int64 {
 	return txid
 }
 
-func (con *stdConnection) invoke(prx *stdProxy, q *outQuest, vk *Invoking) error {
+func (con *_Connection) invoke(prx *_Proxy, q *_OutQuest, vk *Invoking) error {
 	if vk.Txid != 0 {
 		con.mutex.Lock()
 		txid := con.generateTxid()
@@ -192,12 +192,12 @@ func (con *stdConnection) invoke(prx *stdProxy, q *outQuest, vk *Invoking) error
 	return nil
 }
 
-func (con *stdConnection) shut() {
+func (con *_Connection) shut() {
 	con.c.Close()
 	// TODO
 }
 
-func (con *stdConnection) grace() {
+func (con *_Connection) grace() {
 	// TODO
 	con.sendMessage(theByeMessage)
 }
@@ -217,7 +217,7 @@ func makePointerValue(t reflect.Type) reflect.Value {
 	return p
 }
 
-func (con *stdConnection) handleQuest(adapter Adapter, quest *inQuest) {
+func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 	var err error
 	txid := quest.txid
 	si := adapter.FindServant(quest.service)
@@ -229,7 +229,7 @@ func (con *stdConnection) handleQuest(adapter Adapter, quest *inQuest) {
 	}
 
 	oneway := false
-	var answer *outAnswer
+	var answer *_OutAnswer
 	cur := newCurrent(con, quest)
 	if err == nil {
 		mi, ok := si.methods[quest.method]
@@ -292,7 +292,7 @@ func (con *stdConnection) handleQuest(adapter Adapter, quest *inQuest) {
 	}
 }
 
-func (con *stdConnection) handleAnswer(answer *inAnswer) {
+func (con *_Connection) handleAnswer(answer *_InAnswer) {
 	ivk, ok := con.pending[answer.txid]
 	if !ok {
 		dlog.Log("WARNING", "Unknown answer with txid=%d", answer.txid)
@@ -304,7 +304,7 @@ func (con *stdConnection) handleAnswer(answer *inAnswer) {
 		args := NewArguments()
 		ivk.Err = answer.DecodeArgs(args)
 		if ivk.Err == nil {
-			ivk.Err = &stdException{name:args.GetString("exname"),
+			ivk.Err = &_Exception{name:args.GetString("exname"),
 					code:int(args.GetInt("code")),
 					tag:args.GetString("tag"),
 					msg:args.GetString("message")}
@@ -316,7 +316,7 @@ func (con *stdConnection) handleAnswer(answer *inAnswer) {
 	ivk.Done <- ivk
 }
 
-func checkHeader(header xicMessageHeader) error {
+func checkHeader(header _MessageHeader) error {
 	if header.Magic != 'X' || header.Version != '!' {
 		return fmt.Errorf("Unknown message Magic(%d) and Version(%d)", header.Magic, header.Version)
 	}
@@ -344,11 +344,11 @@ func ZZZ(x ...interface{}) {
 	fmt.Println("XXX", file, line, x)
 }
 
-func (con *stdConnection) start() {
+func (con *_Connection) start() {
 	go con.run()
 }
 
-func (con *stdConnection) run() {
+func (con *_Connection) run() {
 	// TODO
 	var wrong error
 	if con.incoming {
@@ -366,7 +366,7 @@ func (con *stdConnection) run() {
 
 loop:
 	for {
-		var header xicMessageHeader
+		var header _MessageHeader
 		if wrong = binary.Read(con.c, binary.BigEndian, &header); wrong != nil {
 			break
 		}
@@ -393,7 +393,7 @@ loop:
 
 		switch msg.Type() {
 		case 'Q':
-			state := conState(atomic.LoadInt32((*int32)(&con.state)))
+			state := _ConState(atomic.LoadInt32((*int32)(&con.state)))
 			if state < con_ACTIVE {
 				wrong = errors.New("Unexpected Quest message received")
 				break loop
@@ -409,7 +409,7 @@ loop:
 			}
 
 			adapter := adp.(Adapter)
-			quest := msg.(*inQuest)
+			quest := msg.(*_InQuest)
 			if con.concurrent > 1 {
 				go con.handleQuest(adapter, quest)
 			} else {
@@ -418,10 +418,10 @@ loop:
 
 			// TODO
 		case 'A':
-			answer := msg.(*inAnswer)
+			answer := msg.(*_InAnswer)
 			con.handleAnswer(answer)
 		case 'C':
-			state := conState(atomic.LoadInt32((*int32)(&con.state)))
+			state := _ConState(atomic.LoadInt32((*int32)(&con.state)))
 			if state != con_WAITING_HELLO {
 				wrong = errors.New("Unexpected Check message received")
 			}

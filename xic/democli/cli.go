@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"mangos/xic"
+	"halftwo/mangos/xic"
 )
 
 func run(engine xic.Engine, args []string) error {
