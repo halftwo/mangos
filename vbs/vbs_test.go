@@ -126,7 +126,7 @@ var st2 = struct {
 	Echo []byte	`vbs:"5"`
 	Foxtrot float64	`vbs:"6"`
 	Golf [4]byte	`vbs:"7"`
-}{st1.Alpha, st1.Bravo, st1.Charlie, st1.Delta, st1.Echo, st1.Foxtrot, st1.Golf, 1}
+}{st1.Alpha, st1.Bravo, st1.Charlie, st1.Delta, st1.Echo, st1.Foxtrot, st1.Golf,}
 
 func TestMarshalStruct(t *testing.T) {
 	testMarshal(t, st1)
