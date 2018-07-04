@@ -16,26 +16,26 @@ func NewBytesWriterAppend(buf *[]byte) BytesWriter {
 // NewBytesWriter will reset the buffer pos to the first byte.
 // New data will write from the begining of the underlying buffer.
 func NewBytesWriter(buf *[]byte) BytesWriter {
-	ba := NewBytesWriter(buf)
-	ba.Reset()
-	return ba
+	bw := NewBytesWriterAppend(buf)
+	bw.Reset()
+	return bw
 }
 
 // Write implements io.Writer interface.
-func (ba BytesWriter) Write(data []byte) (int, error) {
+func (bw BytesWriter) Write(data []byte) (int, error) {
 	if len(data) > 0 {
-		*ba.buf = append(*ba.buf, data...)
+		*bw.buf = append(*bw.buf, data...)
 	}
 	return len(data), nil
 }
 
 // Reset set the buffer pos to the first byte.
-func (ba BytesWriter) Reset() {
-	*ba.buf = (*ba.buf)[:0]
+func (bw BytesWriter) Reset() {
+	*bw.buf = (*bw.buf)[:0]
 }
 
 // Bytes returns the underlying buffer.
-func (ba BytesWriter) Bytes() []byte {
-	return *ba.buf
+func (bw BytesWriter) Bytes() []byte {
+	return *bw.buf
 }
 
