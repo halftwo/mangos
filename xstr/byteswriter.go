@@ -39,3 +39,12 @@ func (bw BytesWriter) Bytes() []byte {
 	return *bw.buf
 }
 
+
+type BytesCounter uint64
+
+// Write add the len(data) to the counter
+func (bc *BytesCounter) Write(data []byte) (int, error) {
+	*bc += BytesCounter(len(data))
+	return len(data), nil
+}
+
