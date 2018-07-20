@@ -118,16 +118,20 @@ func newXicCipher(suite _CipherSuite, keyInfo []byte, isServer bool) (*_Cipher, 
 	return c, nil
 }
 
-func increaseCounter(counter []byte) bool {
-	before := counter[0] & 0x80
+func increaseCounter(counter []byte) {
+	on := (counter[0] & 0x80) != 0
 	for i := 7; i >= 0; i-- {
 		counter[i]++
                 if counter[i] != 0 {
 			break
 		}
 	}
-        after := counter[0] & 0x80
-        return (before == after)
+
+	if on {
+		counter[0] |= 0x80
+	} else {
+		counter[0] &= 0x7f
+	}
 }
 
 func getRandomBytes(buf []byte) error {
@@ -136,9 +140,7 @@ func getRandomBytes(buf []byte) error {
 }
 
 func (c *_Cipher) OutputGetIV(IV []byte) bool {
-	if !increaseCounter(c.oNonce[c.cOff:]) {
-		return false
-	}
+	increaseCounter(c.oNonce[c.cOff:])
 
 	err := getRandomBytes(c.oNonce[c.rOff:c.cOff])
 	if err != nil {
@@ -163,9 +165,7 @@ func (c *_Cipher) OutputMakeMAC() []byte {
 
 
 func (c *_Cipher) InputSetIV(IV []byte) bool {
-	if !increaseCounter(c.iNonce[c.cOff:]) {
-		return false
-	}
+	increaseCounter(c.iNonce[c.cOff:])
 
 	if !bytes.Equal(c.iNonce[c.cOff:], IV[8:16]) {
 		return false
