@@ -11,7 +11,7 @@ import (
 	"halftwo/mangos/eax"
 )
 
-func TestEAX(t *testing.T) {
+func TestEax(t *testing.T) {
 	keyHex	  := "8395FCF1E95BEBD697BD010BC766AAC3"
         nonceHex  := "22E7ADD93CFC6393C57EC0B3C17D6B44"
 	headerHex := "126735FCC320D25A"
@@ -26,7 +26,7 @@ func TestEAX(t *testing.T) {
 
 	out := make([]byte, 128)
 	blockCipher, _ := aes.NewCipher(key)
-	ax, _ := eax.NewEAX(blockCipher)
+	ax, _ := eax.NewEax(blockCipher)
 
 	ax.Start(true, nonce, header)
 	ax.Update(out, msg)
