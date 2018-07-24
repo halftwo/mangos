@@ -28,7 +28,7 @@ type Decoder struct {
 	bytes []byte
 }
 
-func (dec *Decoder) readBytes(data []byte) (n int) {
+func (dec *Decoder) readBlob(data []byte) (n int) {
 	if dec.err == nil {
 		k := len(data)
 		if dec.maxLength > 0 && k > dec.maxLength - dec.size {
@@ -201,7 +201,7 @@ func (dec *Decoder) getBytes(number int64) []byte {
 	if cap(dec.bytes) < num {
 		dec.bytes = make([]byte, num)
 	}
-	k := dec.readBytes(dec.bytes[:num])
+	k := dec.readBlob(dec.bytes[:num])
 	return dec.bytes[:k]
 }
 
@@ -213,7 +213,7 @@ func (dec *Decoder) takeBytes(number int64) []byte {
 	}
 
 	buf := make([]byte, num)
-	k := dec.readBytes(buf)
+	k := dec.readBlob(buf)
 	return buf[:k]
 }
 
@@ -224,7 +224,7 @@ func (dec *Decoder) copyBytes(buf []byte) int {
 		return 0
 	}
 
-	k := dec.readBytes(buf)
+	k := dec.readBlob(buf)
 	return k
 }
 
