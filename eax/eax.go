@@ -123,9 +123,9 @@ type EaxCtx struct {
 	_H [16]byte
 }
 
-func NewEAX(cipher cipher.Block) (*EaxCtx, error) {
+func NewEax(cipher cipher.Block) (*EaxCtx, error) {
 	if cipher.BlockSize() != BLOCK_SIZE {
-		return nil, errors.New("eax: NewEAX requires 128-bit block cipher")
+		return nil, errors.New("eax: NewEax requires 128-bit block cipher")
 	}
 	x := &EaxCtx{cmac:CmacCtx{cipher:cipher}}
 	return x, nil

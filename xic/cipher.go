@@ -100,12 +100,12 @@ func newXicCipher(suite _CipherSuite, keyInfo []byte, isServer bool) (*_Cipher, 
 		return nil, err
 	}
 
-	c.ox, err = eax.NewEAX(blockCipher)
+	c.ox, err = eax.NewEax(blockCipher)
 	if err != nil {
 		panic("Can't reach here")
 	}
 
-	c.ix, err = eax.NewEAX(blockCipher)
+	c.ix, err = eax.NewEax(blockCipher)
 	if err != nil {
 		panic("Can't reach here")
 	}
