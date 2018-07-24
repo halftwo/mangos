@@ -128,6 +128,7 @@ func Marshal(data interface{}) ([]byte, error) {
 type Encoder struct {
 	BytesPacker
 	w io.Writer
+	size int
 	maxDepth int16
 	depth int16
 	err error
@@ -137,6 +138,10 @@ type Encoder struct {
 // NewEncoder returns a new Encoder that writes to w
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{w:w, maxDepth:MaxDepth}
+}
+
+func (enc *Encoder) Size() int {
+	return enc.size
 }
 
 // SetMaxDepth set the max depth of VBS dict and list
@@ -163,14 +168,18 @@ func (enc *Encoder) Encode(data interface{}) error {
 
 func (enc *Encoder) write(buf []byte) {
 	if enc.err == nil {
-		_, enc.err = enc.w.Write(buf)
+		var k int
+		k, enc.err = enc.w.Write(buf)
+		enc.size += k
 	}
 }
 
 func (enc *Encoder) writeByte(b byte) {
 	if enc.err == nil {
+		var k int
 		buf := [1]byte{b}
-		_, enc.err = enc.w.Write(buf[:1])
+		k, enc.err = enc.w.Write(buf[:1])
+		enc.size += k
 	}
 }
 

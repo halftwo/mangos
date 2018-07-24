@@ -11,21 +11,99 @@ type Unmarshaler interface {
 	UnmarshalVbs([]byte) error
 }
 
+
 // A Decoder reads and decodes VBS values from an input stream.
 type Decoder struct {
 	r io.Reader
-	pos int
+	size int
 	maxLength int
 	maxStrLength int
 	maxDepth int16
 	depth int16
 	eof bool
 	finished bool
+	unread bool
+	lastByte byte
 	err error
 	bytes []byte
-	hStart int16
-	hEnd int16
-	hBuffer [32]byte
+}
+
+func (dec *Decoder) readBytes(data []byte) (n int) {
+	if dec.err == nil {
+		k := len(data)
+		if dec.maxLength > 0 && k > dec.maxLength - dec.size {
+			dec.finished = true
+			k = dec.maxLength - dec.size
+		}
+
+		if k > 0 {
+			var err error
+			data = data[:k]
+			if dec.unread {
+				dec.unread = false
+				data[0] = dec.lastByte
+				if k > 1 {
+					n, err = dec.r.Read(data[1:])
+					if n > 0 {
+						dec.lastByte = data[n]
+					}
+				}
+				n += 1
+			} else {
+				n, err = dec.r.Read(data)
+				if n > 0 {
+					dec.lastByte = data[n-1]
+				}
+			}
+
+			if err != nil {
+				if err == io.EOF {
+					dec.eof = true
+				}
+				dec.err = &InvalidVbsError{}
+			}
+
+			dec.size += n
+			if dec.size == dec.maxLength {
+				dec.finished = true
+			}
+		}
+	}
+	return
+}
+
+func (dec *Decoder) readByte() byte {
+	if dec.unread {
+		dec.unread = false
+		return dec.lastByte
+	}
+
+	if dec.err == nil {
+		var buf [1]byte
+		_, err := dec.r.Read(buf[:1])
+		if err == nil {
+			dec.lastByte = buf[0]
+			dec.size++
+			if dec.size == dec.maxLength {
+				dec.finished = true
+			}
+			return dec.lastByte
+		}
+
+		if err == io.EOF {
+			dec.eof = true
+		}
+		dec.err = &InvalidVbsError{}
+	}
+	return 0
+}
+
+func (dec *Decoder) unreadByte() {
+	if dec.unread {
+		panic("unreadByte been called twice")
+	}
+
+	dec.unread = true
 }
 
 // Unmarshal decodes the VBS-encoded data and stores the result in the value pointed to by v.
@@ -39,7 +117,11 @@ func Unmarshal(buf []byte, v interface{}) (rest []byte, err error) {
 
 // NewDecoder returns a Decoder that decodes VBS from input stream r
 func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{r:r, maxLength:MaxLength, maxStrLength:MaxStringLength, maxDepth:MaxDepth}
+	maxLength := MaxLength
+	if b, ok := r.(*bytes.Buffer); ok {
+		maxLength = b.Len()
+	}
+	return NewDecoderLength(r, maxLength)
 }
 
 func NewDecoderLength(r io.Reader, maxLength int) *Decoder {
@@ -92,103 +174,21 @@ func (dec *Decoder) Decode(data interface{}) error {
 }
 
 func (dec *Decoder) More() bool {
-	if dec.hEnd != dec.hStart {
-		return true
-	}
-
 	if dec.eof || dec.finished {
 		return false
 	}
-
-	dec.headBuffer()
-	return !((dec.eof || dec.finished) && dec.hEnd == dec.hStart)
+	return true
 }
 
-func (dec *Decoder) Consumed() int {
-	return dec.pos - int(dec.hEnd - dec.hStart)
+func (dec *Decoder) Size() int {
+	return dec.size
 }
 
 func (dec *Decoder) left() int {
 	if dec.maxLength > 0 {
-		return (dec.maxLength - dec.pos) + int(dec.hEnd - dec.hStart)
+		return (dec.maxLength - dec.size)
 	}
 	return math.MaxInt64
-}
-
-func (dec *Decoder) headBuffer() []byte {
-	hsize := dec.hEnd - dec.hStart
-	if hsize < 16 && !dec.eof && !dec.finished && dec.err == nil {
-		if hsize > 0 {
-			copy(dec.hBuffer[:], dec.hBuffer[dec.hStart:dec.hEnd])
-		}
-		dec.hStart = 0
-		dec.hEnd = hsize
-
-		need := dec.left()
-		if need > len(dec.hBuffer) {
-			need = len(dec.hBuffer)
-		}
-
-		k, err := dec.r.Read(dec.hBuffer[dec.hEnd:need])
-		if k > 0 {
-			dec.hEnd += int16(k)
-			dec.pos += k
-			if dec.maxLength > 0 && dec.pos >= dec.maxLength {
-				dec.finished = true
-			}
-		}
-		if err != nil {
-			if err == io.EOF {
-				dec.eof = true
-			} else {
-				dec.err = err
-			}
-		}
-	}
-	return dec.hBuffer[dec.hStart:dec.hEnd]
-}
-
-func (dec *Decoder) mustRead(buf []byte) (n int) {
-	num := len(buf)
-	hsize := int(dec.hEnd - dec.hStart)
-	if num <= hsize {
-		copy(buf, dec.hBuffer[dec.hStart:dec.hEnd])
-		dec.hStart += int16(num)
-		n += num
-	} else {
-		left := dec.left()
-		if num > left {
-			num = left
-		}
-
-		copy(buf, dec.hBuffer[dec.hStart:dec.hEnd])
-		dec.hStart = dec.hEnd
-		n += hsize
-
-		k, err := dec.r.Read(buf[hsize:num])
-		if k > 0 {
-			n += k
-			dec.pos += k
-			if dec.maxLength > 0 && dec.pos >= dec.maxLength {
-				dec.finished = true
-				if n < len(buf) {
-					dec.err = &InvalidVbsError{}
-				}
-			}
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				dec.eof = true
-				if n < len(buf) {
-					dec.err = &InvalidVbsError{}
-				}
-			} else {
-				dec.err = err
-			}
-		}
-	}
-	return
 }
 
 func (dec *Decoder) getBytes(number int64) []byte {
@@ -201,8 +201,7 @@ func (dec *Decoder) getBytes(number int64) []byte {
 	if cap(dec.bytes) < num {
 		dec.bytes = make([]byte, num)
 	}
-	dec.bytes = dec.bytes[:num]
-	k := dec.mustRead(dec.bytes)
+	k := dec.readBytes(dec.bytes[:num])
 	return dec.bytes[:k]
 }
 
@@ -214,7 +213,7 @@ func (dec *Decoder) takeBytes(number int64) []byte {
 	}
 
 	buf := make([]byte, num)
-	k := dec.mustRead(buf)
+	k := dec.readBytes(buf)
 	return buf[:k]
 }
 
@@ -225,7 +224,7 @@ func (dec *Decoder) copyBytes(buf []byte) int {
 		return 0
 	}
 
-	k := dec.mustRead(buf)
+	k := dec.readBytes(buf)
 	return k
 }
 
@@ -384,29 +383,29 @@ func (dec *Decoder) unpackHead() (head _HeadInfo) {
 		return
 	}
 
-	buf := dec.headBuffer()
-	n := len(buf)
 	negative := false
-	kd := byte(0)
+	kind := byte(0)
 	descriptor := uint16(0)
 	num := uint64(0)
-	i := 0
 again:
-	for i < n {
-		x := buf[i]
-		i++
+	for {
+		x := dec.readByte()
+		if dec.err != nil {
+			return
+		}
+
 		if x < 0x80 {
-			kd = x
+			kind = x
 			if x >= VBS_STRING {
-				kd = (x & 0x60)
+				kind = (x & 0x60)
                                 num = uint64(x & 0x1F)
-				if kd == 0x60 {
-					kd = VBS_INTEGER
+				if kind == 0x60 {
+					kind = VBS_INTEGER
 					negative = true
 				}
 			} else if x >= VBS_BOOL {
 				if x != VBS_BLOB {
-					kd = (x & 0xFE)
+					kind = (x & 0xFE)
 				}
 				if x <= VBS_BOOL + 1 {
 					num = uint64(x & 0x01)
@@ -440,14 +439,12 @@ again:
 			shift := 0
 			num = uint64(x & 0x7F)
 			for {
-				if i >= n {
-					dec.err = &InvalidVbsError{}
+				x = dec.readByte()
+				if dec.err != nil {
 					return
 				}
 
 				shift += 7
-				x = buf[i]
-				i++
 				if x < 0x80 {
 					break
 				}
@@ -461,9 +458,9 @@ again:
 				num |= uint64(x) << uint(shift)
 			}
 
-			kd = x
+			kind = x
 			if x >= VBS_STRING {
-				kd = (x & 0x60)
+				kind = (x & 0x60)
 				x &= 0x1F
 				if x != 0 {
 					left := 64 - shift
@@ -473,12 +470,12 @@ again:
 					}
 					num |= uint64(x) << uint(shift)
 				}
-				if kd == 0x60 {
-					kd = VBS_INTEGER
+				if kind == 0x60 {
+					kind = VBS_INTEGER
 					negative = true
 				}
 			} else if x >= VBS_DECIMAL {
-                                kd = (x & 0xFE)
+                                kind = (x & 0xFE)
                                 negative = (x & 0x01) != 0
 			} else if x >= VBS_DESCRIPTOR && x < VBS_BOOL {
 				x &= 0x07
@@ -510,20 +507,19 @@ again:
 
 			if num > math.MaxInt64 {
 				/* overflow */
-				if !(kd == VBS_INTEGER && negative && int64(num) == math.MinInt64) {
+				if !(kind == VBS_INTEGER && negative && int64(num) == math.MinInt64) {
 					dec.err = &NumberOverflowError{64}
 					return
 				}
 			}
 		}
 
-		head.kind = Kind(kd)
+		head.kind = Kind(kind)
 		head.descriptor = descriptor
 		head.num = int64(num)
 		if negative {
 			head.num = -head.num
 		}
-		dec.hStart += int16(i)
 		return
 	}
 
@@ -563,12 +559,16 @@ func (dec *Decoder) unpackTail() {
 
 func (dec *Decoder) unpackIfTail() bool {
 	if dec.err == nil {
-		buf := dec.headBuffer()
-		if len(buf) > 0 && dec.depth > 0 && buf[0] == byte(VBS_TAIL) {
-			dec.hStart++
+		x := dec.readByte()
+		if dec.err != nil {
+			return false
+		}
+
+		if dec.depth > 0 && x == byte(VBS_TAIL) {
 			dec.depth--
 			return true
 		}
+		dec.unreadByte()
 	}
 	return false
 }
