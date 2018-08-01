@@ -173,6 +173,10 @@ func (dec *Decoder) Decode(data interface{}) error {
 	return dec.err
 }
 
+func (dec *Decoder) Err() error {
+	return dec.err
+}
+
 func (dec *Decoder) More() bool {
 	if dec.eof || dec.finished {
 		return false

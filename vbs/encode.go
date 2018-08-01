@@ -140,6 +140,10 @@ func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{w:w, maxDepth:MaxDepth}
 }
 
+func (enc *Encoder) Err() error {
+	return enc.err
+}
+
 func (enc *Encoder) Size() int {
 	return enc.size
 }
