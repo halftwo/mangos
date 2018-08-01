@@ -29,3 +29,56 @@ func SplitKeyValue(s string, sep string) (key, value string) {
 	return
 }
 
+func IndexNotByte(s []byte, c byte) int {
+	for i, b := range s {
+		if b != c {
+			return i
+		}
+	}
+	return -1
+}
+
+func IndexNotInBytes(s []byte, set []byte) int {
+	if len(set) == 1 {
+		return IndexNotByte(s, set[0])
+	}
+
+again:
+	for i, b := range s {
+		for _, c := range set {
+			if b == c {
+				continue again
+			}
+		}
+		return i
+	}
+	return -1
+}
+
+func LastIndexNotByte(s []byte, c byte) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] != c {
+			return i
+		}
+	}
+	return -1
+}
+
+func LastIndexNotInBytes(s []byte, set []byte) int {
+	if len(set) == 1 {
+		return LastIndexNotByte(s, set[0])
+	}
+
+again:
+	for i := len(s) - 1; i >= 0; i-- {
+		b := s[i]
+		for _, c := range set {
+			if b == c {
+				continue again
+			}
+		}
+		return i
+	}
+	return -1
+}
+
