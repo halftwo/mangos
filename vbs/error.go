@@ -41,6 +41,13 @@ func (e *InvalidUnmarshalError) Error() string {
 	return "vbs: Unmarshal(nil " + e.Type.String() + ")"
 }
 
+type DataLackError struct {
+	Err error
+}
+
+func (e *DataLackError) Error() string {
+        return fmt.Sprintf("vbs: Need more data when decoding: %v", e.Err)
+}
 
 type InvalidVbsError struct {
 }

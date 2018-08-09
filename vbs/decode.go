@@ -60,7 +60,7 @@ func (dec *Decoder) readBlob(data []byte) (n int) {
 				if err == io.EOF {
 					dec.eof = true
 				}
-				dec.err = &InvalidVbsError{}
+				dec.err = &DataLackError{err}
 			}
 
 			dec.size += n
@@ -93,7 +93,7 @@ func (dec *Decoder) readByte() byte {
 		if err == io.EOF {
 			dec.eof = true
 		}
-		dec.err = &InvalidVbsError{}
+		dec.err = &DataLackError{err}
 	}
 	return 0
 }
