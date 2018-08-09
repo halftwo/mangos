@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"bytes"
 	"math"
+	"halftwo/mangos/xerr"
 )
 
 type Marshaler interface {
@@ -253,7 +254,7 @@ func (enc *Encoder) encodeReflectValue(v reflect.Value) {
 
 	// reflect.Func, reflect.Chan, reflect.UnsafePointer:
 	default:
-		enc.err = &UnsupportedTypeError{v.Type()}
+		enc.err = xerr.Trace(&UnsupportedTypeError{v.Type()})
 	}
 }
 
@@ -335,7 +336,7 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 
 	enc.depth++
 	if enc.depth > enc.maxDepth {
-		enc.err = &DepthOverflowError{enc.maxDepth}
+		enc.err = xerr.Trace(&DepthOverflowError{enc.maxDepth})
 		return
 	}
 
@@ -361,7 +362,7 @@ func (enc *Encoder) encodeMap(v reflect.Value) {
 
 	enc.depth++
 	if enc.depth > enc.maxDepth {
-		enc.err = &DepthOverflowError{enc.maxDepth}
+		enc.err = xerr.Trace(&DepthOverflowError{enc.maxDepth})
 		return
 	}
 
@@ -384,7 +385,7 @@ func (enc *Encoder) encodeMap(v reflect.Value) {
 func (enc *Encoder) encodeStruct(v reflect.Value) {
 	enc.depth++
 	if enc.depth >= enc.maxDepth {
-		enc.err = &DepthOverflowError{enc.maxDepth}
+		enc.err = xerr.Trace(&DepthOverflowError{enc.maxDepth})
 		return
 	}
 

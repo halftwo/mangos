@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 	"bytes"
+	"halftwo/mangos/xerr"
 )
 
 type Unmarshaler interface {
@@ -60,7 +61,7 @@ func (dec *Decoder) readBlob(data []byte) (n int) {
 				if err == io.EOF {
 					dec.eof = true
 				}
-				dec.err = &DataLackError{err}
+				dec.err = xerr.Trace(&DataLackError{err})
 			}
 
 			dec.size += n
@@ -93,7 +94,7 @@ func (dec *Decoder) readByte() byte {
 		if err == io.EOF {
 			dec.eof = true
 		}
-		dec.err = &DataLackError{err}
+		dec.err = xerr.Trace(&DataLackError{err})
 	}
 	return 0
 }
@@ -166,7 +167,7 @@ func (dec *Decoder) SetMaxStringLength(length int) {
 func (dec *Decoder) Decode(data interface{}) error {
 	v := reflect.ValueOf(data)
 	if v.Kind() != reflect.Ptr || v.IsNil() {
-		dec.err = &InvalidUnmarshalError{v.Type()}
+		dec.err = xerr.Trace(&InvalidUnmarshalError{v.Type()})
 		return dec.err
 	}
 	dec.decodeReflectValue(v.Elem())
@@ -198,7 +199,7 @@ func (dec *Decoder) left() int {
 func (dec *Decoder) getBytes(number int64) []byte {
 	num := int(number)
 	if num > dec.left() || num > dec.maxStrLength {
-		dec.err = &InvalidVbsError{}
+		dec.err = xerr.Trace(&InvalidVbsError{})
 		return dec.bytes[:0]
 	}
 
@@ -212,7 +213,7 @@ func (dec *Decoder) getBytes(number int64) []byte {
 func (dec *Decoder) takeBytes(number int64) []byte {
 	num := int(number)
 	if num > dec.left() || num > dec.maxStrLength {
-		dec.err = &InvalidVbsError{}
+		dec.err = xerr.Trace(&InvalidVbsError{})
 		return nil
 	}
 
@@ -224,7 +225,7 @@ func (dec *Decoder) takeBytes(number int64) []byte {
 func (dec *Decoder) copyBytes(buf []byte) int {
 	num := len(buf)
 	if num > dec.left() || num > dec.maxStrLength {
-		dec.err = &InvalidVbsError{}
+		dec.err = xerr.Trace(&InvalidVbsError{})
 		return 0
 	}
 
@@ -302,7 +303,7 @@ func (dec *Decoder) decodeReflectValue(v reflect.Value) {
 						v.Set(reflect.ValueOf(x))
 					}
 				} else {
-					dec.err = &NonEmptyInterfaceError{}
+					dec.err = xerr.Trace(&NonEmptyInterfaceError{})
 				}
 			} else {
 				dec.decodeReflectValue(v.Elem())
@@ -312,7 +313,7 @@ func (dec *Decoder) decodeReflectValue(v reflect.Value) {
 
 	// reflect.Func, reflect.Chan, reflect.UnsafePointer:
 	default:
-		dec.err = &UnsupportedTypeError{v.Type()}
+		dec.err = xerr.Trace(&UnsupportedTypeError{v.Type()})
 		return
 	}
 
@@ -374,9 +375,9 @@ func (dec *Decoder) unpackHeadKind(kind Kind, permitDescriptor bool) (head _Head
 	head = dec.unpackHead()
 	if dec.err == nil {
 		if head.kind != kind {
-			dec.err = &MismatchedKindError{Expect:kind, Got:head.kind}
+			dec.err = xerr.Trace(&MismatchedKindError{Expect:kind, Got:head.kind})
 		} else if (!permitDescriptor && head.descriptor != 0) {
-			dec.err = &InvalidVbsError{}
+			dec.err = xerr.Trace(&InvalidVbsError{})
 		}
 	}
 	return
@@ -423,20 +424,20 @@ again:
 					if ((descriptor & VBS_SPECIAL_DESCRIPTOR) == 0) {
 						descriptor |= VBS_SPECIAL_DESCRIPTOR
 					} else {
-						dec.err = &InvalidVbsError{}
+						dec.err = xerr.Trace(&InvalidVbsError{})
 						return
 					}
 				} else {
 					if ((descriptor & VBS_DESCRIPTOR_MAX) == 0) {
 						descriptor |= uint16(num)
 					} else {
-						dec.err = &InvalidVbsError{}
+						dec.err = xerr.Trace(&InvalidVbsError{})
 						return
 					}
 				}
 				goto again
 			} else if !bitmapTestSingle(x) {
-				dec.err = &InvalidVbsError{}
+				dec.err = xerr.Trace(&InvalidVbsError{})
 				return
 			}
 		} else {
@@ -456,7 +457,7 @@ again:
 				x &= 0x7F
 				left := 64 - shift
 				if left <= 0 || (left < 7 && x >= (1 << uint(left))) {
-					dec.err = &NumberOverflowError{64}
+					dec.err = xerr.Trace(&NumberOverflowError{64})
                                         return
                                 }
 				num |= uint64(x) << uint(shift)
@@ -469,7 +470,7 @@ again:
 				if x != 0 {
 					left := 64 - shift
 					if left <= 0 || (left < 7 && x >= (1 << uint(left))) {
-						dec.err = &NumberOverflowError{64}
+						dec.err = xerr.Trace(&NumberOverflowError{64})
 						return
 					}
 					num |= uint64(x) << uint(shift)
@@ -486,33 +487,33 @@ again:
 				if x != 0 {
 					left := 64 - shift
 					if left <= 0 || (left < 7 && x >= (1 << uint(left))) {
-						dec.err = &NumberOverflowError{64}
+						dec.err = xerr.Trace(&NumberOverflowError{64})
 						return
 					}
 					num |= uint64(x) << uint(shift)
 				}
 
 				if num == 0 || num > VBS_DESCRIPTOR_MAX {
-					dec.err = &InvalidVbsError{}
+					dec.err = xerr.Trace(&InvalidVbsError{})
 					return
 				}
 
 				if (descriptor & VBS_DESCRIPTOR_MAX) == 0 {
 					descriptor |= uint16(num)
 				} else {
-					dec.err = &InvalidVbsError{}
+					dec.err = xerr.Trace(&InvalidVbsError{})
 					return
 				}
 				goto again
 			} else if !bitmapTestMulti(x) {
-				dec.err = &InvalidVbsError{}
+				dec.err = xerr.Trace(&InvalidVbsError{})
 				return
 			}
 
 			if num > math.MaxInt64 {
 				/* overflow */
 				if !(kind == VBS_INTEGER && negative && int64(num) == math.MinInt64) {
-					dec.err = &NumberOverflowError{64}
+					dec.err = xerr.Trace(&NumberOverflowError{64})
 					return
 				}
 			}
@@ -527,7 +528,7 @@ again:
 		return
 	}
 
-	dec.err = &InvalidVbsError{}
+	dec.err = xerr.Trace(&InvalidVbsError{})
 	return
 }
 
@@ -536,7 +537,7 @@ func (dec *Decoder) unpackHeadOfList() (head _HeadInfo) {
 	if dec.err == nil {
 		dec.depth++
 		if dec.depth > dec.maxDepth {
-			dec.err = &DepthOverflowError{dec.maxDepth}
+			dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
 		}
 	}
 	return
@@ -547,7 +548,7 @@ func (dec *Decoder) unpackHeadOfDict() (head _HeadInfo) {
 	if dec.err == nil {
 		dec.depth++
 		if dec.depth > dec.maxDepth {
-			dec.err = &DepthOverflowError{dec.maxDepth}
+			dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
 		}
 	}
 	return
@@ -556,7 +557,7 @@ func (dec *Decoder) unpackHeadOfDict() (head _HeadInfo) {
 func (dec *Decoder) unpackTail() {
 	if !dec.unpackIfTail() {
 		if dec.err == nil {
-			dec.err = &InvalidVbsError{}
+			dec.err = xerr.Trace(&InvalidVbsError{})
 		}
 	}
 }
@@ -584,7 +585,7 @@ func (dec *Decoder) decodeIntValue(v reflect.Value) {
 	if dec.err == nil {
 		v.SetInt(head.num)
 		if v.Int() != head.num {
-			dec.err = &IntegerOverflowError{kind:v.Kind(), value:head.num}
+			dec.err = xerr.Trace(&IntegerOverflowError{kind:v.Kind(), value:head.num})
 		}
 	}
 }
@@ -594,7 +595,7 @@ func (dec *Decoder) decodeUintValue(v reflect.Value) {
 	if dec.err == nil {
 		v.SetUint(uint64(head.num))
 		if v.Uint() != uint64(head.num) {
-			dec.err = &IntegerOverflowError{kind:v.Kind(), value:head.num}
+			dec.err = xerr.Trace(&IntegerOverflowError{kind:v.Kind(), value:head.num})
 		}
 	}
 }
@@ -623,7 +624,7 @@ func (dec *Decoder) unpackByteArray(buf []byte) {
 		if int(head.num) == len(buf) {
 			dec.copyBytes(buf)
 		} else {
-			dec.err = &ArrayLengthError{len(buf)}
+			dec.err = xerr.Trace(&ArrayLengthError{len(buf)})
 		}
 	}
 }
@@ -637,7 +638,7 @@ func (dec *Decoder) unpackByteSlice() (buf []byte) {
 	if head.kind == VBS_BLOB || head.kind == VBS_STRING {
 		buf = dec.takeBytes(head.num)
 	} else {
-		dec.err = &MismatchedKindError{Expect:VBS_BLOB, Got:head.kind}
+		dec.err = xerr.Trace(&MismatchedKindError{Expect:VBS_BLOB, Got:head.kind})
 	}
 	return
 }
@@ -665,7 +666,7 @@ func (dec *Decoder) unpackFloat() (r float64) {
 			r = makeFloat(mantissa, expo)
 		}
 	} else {
-		dec.err = &MismatchedKindError{Expect:VBS_FLOATING, Got:head.kind}
+		dec.err = xerr.Trace(&MismatchedKindError{Expect:VBS_FLOATING, Got:head.kind})
 	}
 	return
 }
@@ -709,13 +710,13 @@ func (dec *Decoder) decodeArrayValue(v reflect.Value) {
 	for i := 0; dec.err == nil; i++ {
 		if dec.unpackIfTail() {
 			if i != v.Len() {
-				dec.err = &ArrayLengthError{v.Len()}
+				dec.err = xerr.Trace(&ArrayLengthError{v.Len()})
 			}
 			break
 		}
 
 		if i >= v.Len() {
-			dec.err = &ArrayLengthError{v.Len()}
+			dec.err = xerr.Trace(&ArrayLengthError{v.Len()})
 			return
 		}
 
@@ -826,7 +827,7 @@ func (dec *Decoder) decodeStructValue(v reflect.Value) {
 		case string:
 			f = fields.Find(x)
 		default:
-			dec.err = &InvalidUnmarshalError{reflect.TypeOf(x)}
+			dec.err = xerr.Trace(&InvalidUnmarshalError{reflect.TypeOf(x)})
 			return
 		}
 
@@ -886,7 +887,7 @@ func (dec *Decoder) decodeInterface() (x interface{}) {
 		/* Do nothing */
 
 	default:
-		dec.err = &InvalidVbsError{}
+		dec.err = xerr.Trace(&InvalidVbsError{})
 	}
 
 	return
@@ -895,7 +896,7 @@ func (dec *Decoder) decodeInterface() (x interface{}) {
 func (dec *Decoder) decodeInterfaceSlice() (r interface{}) {
 	dec.depth++
 	if dec.depth > dec.maxDepth {
-		dec.err = &DepthOverflowError{dec.maxDepth}
+		dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
 		return
 	}
 
@@ -919,7 +920,7 @@ func (dec *Decoder) decodeInterfaceSlice() (r interface{}) {
 func (dec *Decoder) decodeInterfaceMap() (r interface{}) {
 	dec.depth++
 	if dec.depth > dec.maxDepth {
-		dec.err = &DepthOverflowError{dec.maxDepth}
+		dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
 		return
 	}
 
@@ -949,13 +950,13 @@ func (dec *Decoder) decodeInterfaceMap() (r interface{}) {
 				ms = make(map[string]interface{})
 				r = ms
 			case reflect.Bool, reflect.Float64, reflect.Slice, reflect.Map:
-				dec.err = &InvalidUnmarshalError{kk.Type()}	// TODO
+				dec.err = xerr.Trace(&InvalidUnmarshalError{kk.Type()})	// TODO
 				return
 			default:
 				panic("vbs: can't reach here!")
 			}
 		} else if kk.Kind() != kind {
-			dec.err = &InvalidUnmarshalError{kk.Type()}	// TODO
+			dec.err = xerr.Trace(&InvalidUnmarshalError{kk.Type()})	// TODO
 			return
 		}
 
