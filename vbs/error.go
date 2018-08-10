@@ -46,7 +46,7 @@ type DataLackError struct {
 }
 
 func (e *DataLackError) Error() string {
-        return fmt.Sprintf("vbs: Need more data when decoding: %v", e.Err)
+        return fmt.Sprintf("vbs: Need more data when decoding: %#v", e.Err)
 }
 
 type InvalidVbsError struct {
