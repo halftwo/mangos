@@ -109,7 +109,18 @@ func (dec *Decoder) unreadByte() {
 
 // Unmarshal decodes the VBS-encoded data and stores the result in the value pointed to by v.
 // If v is nil or not a pointer, Unmarshal returns an InvalidUnmarshalError.
-func Unmarshal(buf []byte, v interface{}) (rest []byte, err error) {
+func Unmarshal(buf []byte, v interface{}) error {
+	rest, err := UnmarshalOneItem(buf, v)
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return &ExtraDataLeftError{}
+	}
+	return nil
+}
+
+func UnmarshalOneItem(buf []byte, v interface{}) (rest []byte, err error) {
 	dec := NewDecoderBytes(buf)
 	dec.Decode(v)
 	b := dec.r.(*bytes.Buffer)

@@ -114,3 +114,10 @@ func (e *UnmarshalTypeError) Error() string {
 	return "vbs: cannot unmarshal " + e.Value + " into Go value of type " + e.Type.String()
 }
 
+type ExtraDataLeftError struct {
+}
+
+func (e *ExtraDataLeftError) Error() string {
+	return "vbs: extra data left undecode"
+}
+
