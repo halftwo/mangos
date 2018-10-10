@@ -256,7 +256,7 @@ func newInCheck(buf []byte) *_InCheck {
 	c := &_InCheck{}
 	dec := vbs.NewDecoderBytes(buf)
 	dec.Decode(&c.cmd)
-	c.argsOff = dec.Consumed()
+	c.argsOff = dec.Size()
 	c.buf = buf
 	return c
 }
@@ -280,7 +280,7 @@ func newInQuest(buf []byte) *_InQuest {
 	dec.Decode(&q.service)
 	dec.Decode(&q.method)
 	dec.Decode(&q.ctx)
-	q.argsOff = dec.Consumed()
+	q.argsOff = dec.Size()
 	q.buf = buf
 	return q
 }
@@ -300,7 +300,7 @@ func newInAnswer(buf []byte) *_InAnswer {
 	dec := vbs.NewDecoderBytes(buf)
 	dec.Decode(&a.txid)
 	dec.Decode(&a.status)
-	a.argsOff = dec.Consumed()
+	a.argsOff = dec.Size()
 	a.buf = buf
 	return a
 }
