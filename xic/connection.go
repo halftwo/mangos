@@ -70,6 +70,7 @@ type _Connection struct {
 	engine *_Engine
 	adapter atomic.Value	// Adapter
 	serviceHint string
+	cipher *_Cipher
 	incoming bool
 	timeout int
 	concurrent int
@@ -215,6 +216,63 @@ func makePointerValue(t reflect.Type) reflect.Value {
 		elem.Set(reflect.MakeMap(elem.Type()))
 	}
 	return p
+}
+
+func (con *_Connection) handleCheck(check *_InCheck) {
+	if con.incoming {	// server
+		switch check.cmd {
+		case "SRP6a1":
+			type _S1Args struct {
+				I string
+			}
+			var args _S1Args;
+			check.DecodeArgs(&args)
+
+		case "SRP6a3":
+			type _S3Args struct {
+				A []byte
+				M1 []byte
+			}
+			var args _S3Args;
+			check.DecodeArgs(&args)
+		}
+	} else {		// client
+		switch check.cmd {
+		case "FORBIDDEN":
+			type _Args struct {
+				Reason string	`vbs:"reason"`
+			}
+			var args _Args
+			check.DecodeArgs(&args)
+
+		case "AUTHENTICATE":
+			type _Args struct {
+				Method string	`vbs:"method"`
+			}
+			var args _Args
+			check.DecodeArgs(&args)
+
+		case "SRP6a2":
+			type _S2Args struct {
+				Hash string	`vbs:"hash"`
+				N []byte
+				Gen []byte	`vbs:"g"`
+				Salt []byte	`vbs:"s"`
+				B []byte
+			}
+			var args _S2Args;
+			check.DecodeArgs(&args)
+
+		case "SRP6a4":
+			type _S4Args struct {
+				M2 []byte
+				Cipher string	`vbs:"CIPHER"`
+				Mode int	`vbs:"MODE"`
+			}
+			var args _S4Args;
+			check.DecodeArgs(&args)
+		}
+	}
 }
 
 func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
@@ -415,17 +473,21 @@ loop:
 			} else {
 				con.handleQuest(adapter, quest)
 			}
-
 			// TODO
+
 		case 'A':
 			answer := msg.(*_InAnswer)
 			con.handleAnswer(answer)
+
 		case 'C':
 			state := _ConState(atomic.LoadInt32((*int32)(&con.state)))
 			if state != con_WAITING_HELLO {
 				wrong = errors.New("Unexpected Check message received")
 			}
+			check := msg.(*_InCheck)
+			con.handleCheck(check)
 			// TODO
+
 		case 'H':
 			if !atomic.CompareAndSwapInt32((*int32)(&con.state), int32(con_WAITING_HELLO), int32(con_ACTIVE)) {
 				wrong = errors.New("Unexpected Hello message received")
