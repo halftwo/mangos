@@ -13,7 +13,7 @@ import (
 type EndpointInfo struct {
 	proto string
 	host string
-	port int
+	port uint16
 	timeout int
 	closeTimeout int
 	connectTimeout int
@@ -36,7 +36,7 @@ func parseEndpoint(endpoint string) (*EndpointInfo, error) {
 		return nil, fmt.Errorf("Invalid port in endpoint \"%s\"", endpoint)
 
 	}
-	ei.port = port
+	ei.port = uint16(port)
 
 	if netSp.HasMore() || netSp.Count() != 3 {
 		return nil, fmt.Errorf("Invalid format. endpoint=%s", endpoint)
@@ -49,8 +49,8 @@ func parseEndpoint(endpoint string) (*EndpointInfo, error) {
 	}
 
 	for tk.HasMore() {
-		key, value := xstr.SplitKeyValue(tk.Next(), "=")
-		if value == "" {
+		key, value, err := xstr.SplitKeyValue(tk.Next(), "=")
+		if err != nil || value == "" {
 			continue
 		}
 

@@ -24,9 +24,9 @@ func TestArguments(t *testing.T) {
 	var p Params
 	err := args.GetStruct("world", &p)
 	if err != nil {
-		fmt.Println("ERROR:", err)
+		t.Error(err)
 	}
-	fmt.Printf("%+v\n", p)
+	t.Logf("%+v\n", p)
 }
 
 func TestArgumentsCopy(t *testing.T) {
@@ -40,6 +40,7 @@ func TestArgumentsCopy(t *testing.T) {
 
 	b := NewArguments()
 	b.CopyFrom(a)
-	fmt.Printf("a: %v\n", a)
-	fmt.Printf("b: %v\n", b)
+	t.Logf("a: %v\n", a)
+	t.Logf("b: %v\n", b)
 }
+
