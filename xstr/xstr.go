@@ -2,6 +2,7 @@
 package xstr
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -18,13 +19,24 @@ func RightAlignedCopy(to []byte, from []byte) {
 	}
 }
 
-func SplitKeyValue(s string, sep string) (key, value string) {
+func SplitKeyValue(s string, sep string) (key, value string, err error) {
 	i := strings.Index(s, sep)
 	if i < 0 {
-		key = s
+		err = fmt.Errorf("No seperator \"%s\" found in the string", sep)
 	} else {
-		key = s[:i]
-		value = s[i+1:]
+		key = strings.TrimSpace(s[:i])
+		value = strings.TrimSpace(s[i+len(sep):])
+	}
+	return
+}
+
+func Split2(s string, sep string) (left, right string) {
+	i := strings.Index(s, sep)
+	if i < 0 {
+		left = s
+	} else {
+		left = s[:i]
+		right = s[i+len(sep):]
 	}
 	return
 }
@@ -81,4 +93,5 @@ again:
 	}
 	return -1
 }
+
 
