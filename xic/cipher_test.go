@@ -3,28 +3,27 @@ package xic
 import (
 	"testing"
 	"bytes"
+	"math/rand"
 )
 
+func getRandomBytes(buf []byte) error {
+	_, err := rand.Read(buf)
+	return err
+}
+
 func TestCipher(t *testing.T) {
-	keyInfo := make([]byte, 64)
+	keyInfo := make([]byte, 17)
 	getRandomBytes(keyInfo)
 	srv, _ := newXicCipher(AES192_EAX, keyInfo, true)
 	cli, _ := newXicCipher(AES192_EAX, keyInfo, false)
 
 	var header [15]byte
-	var IV [16]byte
 	var cipher, plain, out [100]byte
 
 	getRandomBytes(header[:])
 	getRandomBytes(plain[:])
 
 	var ok = true
-	if !srv.OutputGetIV(IV[:]) {
-		ok = false
-	}
-	if !cli.InputSetIV(IV[:]) {
-		ok = false
-	}
 
 	srv.OutputStart(header[:])
 	cli.InputStart(header[:])
@@ -32,8 +31,9 @@ func TestCipher(t *testing.T) {
 	srv.OutputUpdate(cipher[:], plain[:])
 	cli.InputUpdate(out[:], cipher[:])
 
-	MAC := srv.OutputMakeMAC()
-	if !cli.InputCheckMAC(MAC) {
+	var mac [16]byte
+	srv.OutputFinish(mac[:])
+	if !cli.InputFinish(mac[:]) {
 		ok = false
 	}
 
@@ -41,3 +41,4 @@ func TestCipher(t *testing.T) {
 		t.Errorf("test cipher failed")
 	}
 }
+
