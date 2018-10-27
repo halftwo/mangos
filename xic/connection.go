@@ -3,6 +3,7 @@ package xic
 import (
 	"fmt"
 	"net"
+	"bytes"
 	"strings"
 	"errors"
 	"sync"
@@ -10,8 +11,10 @@ import (
 	"runtime"
 	"sync/atomic"
 	"encoding/binary"
+	"math/big"
 
 	"halftwo/mangos/dlog"
+	"halftwo/mangos/srp6a"
 )
 
 type _Current struct {
@@ -70,6 +73,8 @@ type _Connection struct {
 	engine *_Engine
 	adapter atomic.Value	// Adapter
 	serviceHint string
+	shadowBox *ShadowBox
+	_srp6a interface{}
 	cipher *_Cipher
 	incoming bool
 	timeout int
@@ -219,59 +224,132 @@ func makePointerValue(t reflect.Type) reflect.Value {
 }
 
 func (con *_Connection) handleCheck(check *_InCheck) {
+	type _ForbiddenArgs struct {
+		Reason string	`vbs:"reason"`
+	}
+	type _AuthArgs struct {
+		Method string	`vbs:"method"`
+	}
+	type _S1Args struct {
+		I string	`vbs:"I"`
+	}
+	type _S2Args struct {
+		Hash string	`vbs:"hash"`
+		N []byte	`vbs:"N"`
+		Gen []byte	`vbs:"g"`
+		Salt []byte	`vbs:"s"`
+		B []byte	`vbs:"B"`
+	}
+	type _S3Args struct {
+		A []byte	`vbs:"A"`
+		M1 []byte	`vbs:"M1"`
+	}
+	type _S4Args struct {
+		M2 []byte	`vbs:"M2"`
+		Cipher string	`vbs:"CIPHER"`
+		Mode int	`vbs:"MODE"`
+	}
+
+	var msg _OutMessage
 	if con.incoming {	// server
 		switch check.cmd {
 		case "SRP6a1":
-			type _S1Args struct {
-				I string
+			var s1 _S1Args;
+			check.DecodeArgs(&s1)
+
+			v := con.shadowBox.GetVerifier(s1.I)
+			if v == nil {
+				// TODO
 			}
-			var args _S1Args;
-			check.DecodeArgs(&args)
+
+			var s2 _S2Args;
+			server, err := con.shadowBox.CreateSrp6aServer(v.ParamId, v.HashId)
+			if err != nil {
+				// TODO
+			}
+			con._srp6a = server
+			server.SetV(v.Verifier)
+			s2.Hash = server.HashName()
+			s2.N = server.N()
+			s2.Gen = server.G()
+			s2.Salt = v.Salt
+			s2.B = server.GenerateB()
+			msg = newOutCheck("SRP6a2", &s2)
 
 		case "SRP6a3":
-			type _S3Args struct {
-				A []byte
-				M1 []byte
+			var s3 _S3Args;
+			check.DecodeArgs(&s3)
+
+			server := con._srp6a.(*srp6a.Srp6aServer)
+			server.SetA(s3.A)
+			M1 := server.ComputeM1()
+			if !bytes.Equal(M1, s3.M1) {
+				// TODO
 			}
-			var args _S3Args;
-			check.DecodeArgs(&args)
+
+			var s4 _S4Args;
+			s4.M2 = server.ComputeM2()
+			s4.Cipher = "AES128-EAX"	// TEST
+			s4.Mode = 1			// TEST
+			msg = newOutCheck("SRP6a4", &s4)
 		}
-	} else {		// client
+	} else {	// client
 		switch check.cmd {
 		case "FORBIDDEN":
-			type _Args struct {
-				Reason string	`vbs:"reason"`
-			}
-			var args _Args
+			var args _ForbiddenArgs
 			check.DecodeArgs(&args)
 
 		case "AUTHENTICATE":
-			type _Args struct {
-				Method string	`vbs:"method"`
-			}
-			var args _Args
+			var args _AuthArgs
 			check.DecodeArgs(&args)
+			if args.Method != "SRP6a" {
+				// TODO
+			}
+
+			secretBox := (*SecretBox)(nil) // TEST
+			id, pass := secretBox.Find(con.serviceHint, con.endpoint)
+			if id == "" || pass == "" {
+				// TODO
+			}
+
+			client := srp6a.NewClientEmpty()
+			con._srp6a = client
+			client.SetIdentity(id, pass)
+			var s1 _S1Args;
+			s1.I = id
+			msg = newOutCheck("SRP6a1", &s1)
 
 		case "SRP6a2":
-			type _S2Args struct {
-				Hash string	`vbs:"hash"`
-				N []byte
-				Gen []byte	`vbs:"g"`
-				Salt []byte	`vbs:"s"`
-				B []byte
-			}
-			var args _S2Args;
-			check.DecodeArgs(&args)
+			var s2 _S2Args;
+			check.DecodeArgs(&s2)
+
+			Gen := new(big.Int).SetBytes(s2.Gen)
+			client := con._srp6a.(*srp6a.Srp6aClient)
+			client.SetHash(s2.Hash)
+			client.SetParameter(int(Gen.Int64()), s2.N, len(s2.N) * 8)
+			client.SetSalt(s2.Salt)
+			client.SetB(s2.B)
+
+			var s3 _S3Args;
+			s3.A = client.GenerateA()
+			s3.M1 = client.ComputeM1()
+			msg = newOutCheck("SRP6a1", &s3)
 
 		case "SRP6a4":
-			type _S4Args struct {
-				M2 []byte
-				Cipher string	`vbs:"CIPHER"`
-				Mode int	`vbs:"MODE"`
+			var s4 _S4Args;
+			check.DecodeArgs(&s4)
+
+			client := con._srp6a.(*srp6a.Srp6aClient)
+			M2 := client.ComputeM2()
+			if !bytes.Equal(M2, s4.M2) {
+				//TODO
 			}
-			var args _S4Args;
-			check.DecodeArgs(&args)
+			// TODO
 		}
+	}
+
+	if msg != nil {
+		// TODO
 	}
 }
 

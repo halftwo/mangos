@@ -24,7 +24,7 @@ type _MessageHeader struct {
 	Magic byte	// 'X'
 	Version byte	// '!'
 	Type byte	// 'Q', 'A', 'H', 'B', 'C'
-	Flags byte	// 0x00 or 0x01
+	Flags byte	// 0x00 or 0x02
 	BodySize int32	// in big endian byte order
 }
 
@@ -95,6 +95,7 @@ func (m _ByeMessage) Bytes() []byte {
 type _OutCheck struct {
 	buf []byte
 }
+var _ _OutMessage = (*_OutCheck)(nil)
 
 func newOutCheck(cmd string, args interface{}) *_OutCheck {
 	b := &bytes.Buffer{}
@@ -125,6 +126,7 @@ type _OutQuest struct {
 	start int
 	buf []byte
 }
+var _ _OutMessage = (*_OutQuest)(nil)
 
 func newOutQuest(txid int64, service, method string, ctx Context, args interface{}) *_OutQuest {
 	q := &_OutQuest{txid:txid, start:-1}
@@ -178,6 +180,7 @@ type _OutAnswer struct {
 	start int
 	buf []byte
 }
+var _ _OutMessage = (*_OutAnswer)(nil)
 
 func newOutAnswer(status int, args interface{}) *_OutAnswer {
 	a := &_OutAnswer{txid:-1, start:-1}
