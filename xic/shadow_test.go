@@ -47,7 +47,7 @@ func TestShadowBox(t *testing.T) {
 		t.Errorf("Bug in (*Shadow).GetVerifier()")
 	}
 
-	s := sb.GetSrp6a(v.ParamId)
+	s := sb.GetSrp6aParams(v.ParamId)
 	if s.Bits != 512 || s.Gen != 2 {
 		t.Log("bits", s.Bits, "g", s.Gen)
 		t.Errorf("Bug in (*Shadow).GetSrp6a()")

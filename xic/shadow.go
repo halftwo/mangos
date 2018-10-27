@@ -16,12 +16,13 @@ import (
 
 	"halftwo/mangos/xstr"
 	"halftwo/mangos/xerr"
+	"halftwo/mangos/srp6a"
 )
 
 
 type _Srp6a struct {
-	Bits uint
-	Gen uint64
+	Bits int
+	Gen int
 	N []byte
 }
 
@@ -145,12 +146,13 @@ func (sb *ShadowBox) _addItem(lineno int, section _Section, buf []byte) error {
 		if err != nil || n < 512 || n > 1024*32 {
                         return xerr.Tracef(n, "Invalid bits on line %d", lineno)
 		}
-		s.Bits = uint(n)
+		s.Bits = int(n)
 
-		s.Gen, err = strconv.ParseUint(string(gen_), 10, 64)
+		n, err = strconv.ParseUint(string(gen_), 10, 31)
 		if err != nil {
                         return xerr.Tracef(nil, "Invalid gen on line %d", lineno)
 		}
+		s.Gen = int(n)
 
 		N_ := removeSpace(bc.Remain())
 		s.N, err = hex.DecodeString(string(N_))
@@ -238,7 +240,7 @@ func (sb *ShadowBox) _addInternalParameters() {
 	sb._addInternal("@4096", 4096, 5, N4096_str)
 }
 
-func (sb *ShadowBox) _addInternal(paramId string, bits uint, g uint64, Nstr string) {
+func (sb *ShadowBox) _addInternal(paramId string, bits int, g int, Nstr string) {
 	if paramId[0] != '@' {
 		panic("Invalid internal paramId")
 	}
@@ -351,12 +353,25 @@ func (sb *ShadowBox) GetContent() string {
 	return string(b.Bytes())
 }
 
-func (sb *ShadowBox) GetSrp6a(paramId string) *_Srp6a {
+func (sb *ShadowBox) GetSrp6aParams(paramId string) *_Srp6a {
 	return sb.srp6aMap[paramId]
 }
 
 func (sb *ShadowBox) GetVerifier(identity string) *_Verifier {
 	return sb.verifierMap[identity]
+}
+
+func (sb *ShadowBox) CreateSrp6aServer(paramId string, hashId string) (*srp6a.Srp6aServer, error) {
+	params := sb.GetSrp6aParams(paramId)
+	if params == nil {
+		return nil, xerr.Tracef(nil, "Unknown paramId \"%s\"", paramId)
+	}
+
+	server := srp6a.NewServer(params.Gen, params.N, params.Bits, hashId)
+	if server.Err() != nil {
+		return nil, server.Err()
+	}
+	return server, nil
 }
 
 
