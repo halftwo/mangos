@@ -100,7 +100,7 @@ const (
 func removeSpace(buf []byte) []byte {
 	buf = bytes.TrimSpace(buf)
 	bc := xstr.NewBytesCutter(buf)
-	part := bc.NextPartFunc(unicode.IsSpace)
+	part := bc.NextTokenSpace()
 	if !bc.HasMore() {
 		return part
 	}
@@ -108,7 +108,7 @@ func removeSpace(buf []byte) []byte {
 	bf := &bytes.Buffer{}
 	bf.Write(part)
 	for bc.HasMore() {
-		bf.Write(bc.NextPartFunc(unicode.IsSpace))
+		bf.Write(bc.NextTokenSpace())
 	}
 	return bf.Bytes()
 }

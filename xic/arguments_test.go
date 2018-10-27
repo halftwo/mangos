@@ -2,7 +2,6 @@ package xic
 
 import (
 	"testing"
-	"fmt"
 )
 
 func TestArguments(t *testing.T) {
@@ -14,7 +13,7 @@ func TestArguments(t *testing.T) {
 	args.Set("hello", 5.4321)
 	args.Set("world", m)
 
-	fmt.Println(args.GetString("hello"))
+	t.Log(args.Get("hello"))
 
 	type Params struct {
 		A float32	`vbs:"a"`
