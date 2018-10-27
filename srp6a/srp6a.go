@@ -78,7 +78,7 @@ func (b *_Srp6aBase) Err() error {
 	return b.err
 }
 
-func (b *_Srp6aBase) setHash(hash string) {
+func (b *_Srp6aBase) SetHash(hash string) {
 	if strings.EqualFold(hash, "SHA1") {
 		b.hashName = "SHA1"
 		b.hasher = sha1.New()
@@ -90,7 +90,7 @@ func (b *_Srp6aBase) setHash(hash string) {
 	}
 }
 
-func (b *_Srp6aBase) setParameter(g int, N []byte, bits int) {
+func (b *_Srp6aBase) SetParameter(g int, N []byte, bits int) {
 	if b.err != nil {
 		return
 	}
@@ -116,6 +116,10 @@ func (b *_Srp6aBase) setParameter(g int, N []byte, bits int) {
 	b.hasher.Write(b._g)
 	buf := b.hasher.Sum(nil)
 	b.ik = new(big.Int).SetBytes(buf)
+}
+
+func (b *_Srp6aBase) HashName() string {
+	return b.hashName
 }
 
 func (b *_Srp6aBase) Bits() int {
@@ -228,10 +232,14 @@ type Srp6aServer struct {
 	iA *big.Int
 }
 
+func NewServerEmpty() *Srp6aServer {
+	return &Srp6aServer{}
+}
+
 func NewServer(g int, N []byte, bits int, hash string) *Srp6aServer {
 	srv := &Srp6aServer{}
-	srv.setHash(hash)
-	srv.setParameter(g, N, bits)
+	srv.SetHash(hash)
+	srv.SetParameter(g, N, bits)
 	return srv
 }
 
@@ -336,10 +344,14 @@ type Srp6aClient struct {
 	_v []byte
 }
 
+func NewClientEmpty() *Srp6aClient {
+	return &Srp6aClient{}
+}
+
 func NewClient(g int, N []byte, bits int, hash string) *Srp6aClient {
 	cli := &Srp6aClient{}
-	cli.setHash(hash)
-	cli.setParameter(g, N, bits)
+	cli.SetHash(hash)
+	cli.SetParameter(g, N, bits)
 	return cli
 }
 
