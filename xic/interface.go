@@ -35,7 +35,7 @@ type Setting interface {
 type Engine interface {
 	Setting() Setting
 	Name() string
-	Uuid() string
+	Id() string
 
 	CreateAdapter(name string) (Adapter, error)
 	CreateAdapterEndpoints(name string, endpoints string) (Adapter, error)

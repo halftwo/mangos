@@ -1,11 +1,13 @@
 package xic
 
 import (
+	"math"
 	"math/rand"
 	crand "crypto/rand"
 	"encoding/hex"
 	"encoding/binary"
 	"sync"
+	"halftwo/mangos/xbase57"
 )
 
 var once sync.Once
@@ -36,5 +38,23 @@ func GenerateRandomUuid() string {
 	return (hex.EncodeToString(buf[:4]) + "-" + hex.EncodeToString(buf[4:6]) + 
 		"-" + hex.EncodeToString(buf[6:8]) + "-" + hex.EncodeToString(buf[8:10]) + 
 		"-" + hex.EncodeToString(buf[10:]))
+}
+
+func GenerateRandomBase57Id(n int) string {
+	if n < 1 {
+		panic("length of id must be greater than 1")
+	}
+
+	m := xbase57.StdEncoding.DecodedLen(n) + 1
+	if m < 4 {
+		m = 4
+	}
+	src := make([]byte, m)
+	dst := make([]byte, n)
+	crand.Read(src)
+	k := xbase57.StdEncoding.Encode(dst, src)
+	u32 := binary.BigEndian.Uint32(src[:4])
+	dst[0] = xbase57.StdAlphabet[u32/(math.MaxUint32/49+1)]
+	return string(dst[:k])
 }
 

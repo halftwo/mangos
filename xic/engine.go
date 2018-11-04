@@ -9,7 +9,7 @@ type _Engine struct {
 	mutex sync.Mutex
 	setting Setting
 	name string
-	uuid string
+	id string
 
 	adapterMap map[string]*_Adapter
 	proxyMap map[string]*_Proxy
@@ -28,9 +28,9 @@ func newEngineSetting(setting Setting) *_Engine {
 
 func newEngineSettingName(setting Setting, name string) *_Engine {
 	// TODO
-	uuid := GenerateRandomUuid()
+	id := GenerateRandomBase57Id(23)
 	done := make(chan struct{}, 1)
-	engine := &_Engine{setting:setting, name:name, uuid:uuid, done:done}
+	engine := &_Engine{setting:setting, name:name, id:id, done:done}
 	engine.adapterMap = make(map[string]*_Adapter)
 	engine.proxyMap = make(map[string]*_Proxy)
 	engine.outConMap = make(map[string]*_Connection)
@@ -45,8 +45,8 @@ func (engine *_Engine) Name() string {
 	return engine.name
 }
 
-func (engine *_Engine) Uuid() string {
-	return engine.uuid
+func (engine *_Engine) Id() string {
+	return engine.id
 }
 
 func (engine *_Engine) CreateAdapter(name string) (Adapter, error) {
