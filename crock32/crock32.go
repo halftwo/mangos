@@ -25,7 +25,7 @@ var detab = [128]int8{
 
 // EncodedLen returns the length in bytes of the crock32 encoding
 // of an input buffer of length n.
-func EncodeLen(n int) int {
+func EncodedLen(n int) int {
 	return (n * 8 + 4) / 5
 }
 
@@ -40,14 +40,14 @@ func EncodeLower(out []byte, in []byte) int {
 }
 
 func EncodeToUpperString(in []byte) string {
-	n := EncodeLen(len(in))
+	n := EncodedLen(len(in))
 	buf := make([]byte, n)
 	EncodeUpper(buf, in)
 	return string(buf)
 }
 
 func EncodeToLowerString(in []byte) string {
-	n := EncodeLen(len(in))
+	n := EncodedLen(len(in))
 	buf := make([]byte, n)
 	EncodeLower(buf, in)
 	return string(buf)
@@ -127,7 +127,7 @@ func encode(alphabet []byte, out, in []byte) int {
 
 // DecodedLen returns the maximum length in bytes of the decoded data 
 // corresponding to n bytes of crock32-encoded data.
-func DecodeLen(n int) int {
+func DecodedLen(n int) int {
 	return (n * 5 + 7) / 8
 }
 
@@ -145,7 +145,7 @@ func DecodeFuzzy(out []byte, in []byte) int {
 }
 
 func DecodeString(s string) ([]byte, error) {
-	n := DecodeLen(len(s))
+	n := DecodedLen(len(s))
 	buf := make([]byte, n)
 	k := Decode(buf, []byte(s))
 	if k < 0 {
@@ -155,7 +155,7 @@ func DecodeString(s string) ([]byte, error) {
 }
 
 func DecodeFuzzyString(s string) ([]byte, error) {
-	n := DecodeLen(len(s))
+	n := DecodedLen(len(s))
 	buf := make([]byte, n)
 	k := DecodeFuzzy(buf, []byte(s))
 	if k < 0 {

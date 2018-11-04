@@ -10,7 +10,7 @@ import (
 func Test1(t *testing.T) {
 	var u1 [256]byte
 	var u2 [256]byte
-	v := make([]byte, EncodeLen(len(u1)+10))
+	v := make([]byte, EncodedLen(len(u1)+10))
 	for k:= 0; k < 1000; k++ {
 		i := rand.Intn(len(u1)) + 1
 		rand.Read(u1[:i])
