@@ -16,7 +16,7 @@ import (
 )
 
 const record_TYPE_RAW	= 0
-const record_VERSION	= 4
+const record_VERSION	= 5
 
 const record_HEAD_SIZE	= 16
 const record_BIG_ENDIAN = 0x08
@@ -28,7 +28,7 @@ type _RecordHead struct {
 	locusEnd uint8
 	port uint16
 	pid  uint16
-	usec int64
+	msec int64
 }
 
 type _RecordMan struct {
@@ -226,7 +226,8 @@ func (lg *Dlogger) Log(tag string, format string, a ...interface{}) {
 
 func (lg *Dlogger) printStderr(rec *_RecordMan) {
 	now := time.Now()
-	ts := now.Format("060102-150405")
+	fstr := fmt.Sprintf("060102%c150405", "umtwrfs"[now.Weekday()])
+	ts := now.Format(fstr)
 	fmt.Fprintf(os.Stderr, "%s :: %d+%d %s\n", ts, rec.pid, 0, rec.BodyBytes())
 }
 
