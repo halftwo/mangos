@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 	"halftwo/mangos/xic"
+	"halftwo/mangos/dlog"
 )
 
 type _DemoServant struct {
@@ -49,11 +50,10 @@ func (srv *_DemoServant) Xic_time(cur xic.Current, in _TimeInArgs, out *_TimeOut
 	} else {
 		t = time.Unix(in.Time, 0)
 	}
-	const format = "2006-01-02T03:04:05-07:00 Mon"
 	out.Con = cur.Con().String()
 	out.Time = t.Unix()
-	out.Strftime.Utc = t.UTC().Format(format)
-	out.Strftime.Local = t.Format(format)
+	out.Strftime.Utc = dlog.UtcTimeString(t)
+	out.Strftime.Local = dlog.LocalTimeString(t)
 	return nil
 }
 
