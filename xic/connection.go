@@ -109,7 +109,22 @@ func newIncomingConnection(adapter *_Adapter, c net.Conn) *_Connection {
 
 func (con *_Connection) String() string {
 	laddr := con.c.LocalAddr()
-	return fmt.Sprintf("%s/%s/%s", laddr.Network(), laddr.String(), con.c.RemoteAddr().String())
+	raddr := con.c.RemoteAddr()
+	{
+		l, ok := laddr.(*net.TCPAddr)
+		if ok {
+			r := raddr.(*net.TCPAddr)
+			return fmt.Sprintf("tcp/%s+%d/%s+%d", l.IP.String(), l.Port, r.IP.String(), r.Port)
+		}
+	}
+	{
+		l, ok := laddr.(*net.UDPAddr)
+		if ok {
+			r := raddr.(*net.UDPAddr)
+			return fmt.Sprintf("udp/%s+%d/%s+%d", l.IP.String(), l.Port, r.IP.String(), r.Port)
+		}
+	}
+	return fmt.Sprintf("%s/%s/%s", laddr.Network(), laddr.String(), raddr.String())
 }
 
 func (con *_Connection) IsLive() bool {
