@@ -211,6 +211,17 @@ func getLocus(skip int) (locus string) {
 	return
 }
 
+func UtcTimeString(t time.Time) string {
+	t2 := t.UTC()
+	fstr := fmt.Sprintf("060102%c150405", "umtwrfs"[t2.Weekday()])
+	return t2.Format(fstr)
+}
+
+func LocalTimeString(t time.Time) string {
+	fstr := fmt.Sprintf("060102%c150405", "umtwrfs"[t.Weekday()])
+	return t.Format(fstr)
+}
+
 // Log send a dlog to dlogd. 
 // identity is from the logger's default.
 // locus is from runtime.Caller()
