@@ -15,24 +15,26 @@ import (
 	"time"
 )
 
-const record_TYPE_RAW	= 0
-const record_VERSION	= 5
+const (
+	_RECORD_TYPE_RAW	= 0
+	_RECORD_VERSION		= 6
 
-const record_HEAD_SIZE	= 16
-const record_BIG_ENDIAN = 0x08
+	_RECORD_HEAD_SIZE	= 18
+	_RECORD_BIG_ENDIAN	= 0x08
+)
 
-// little endian byte order
-type _RecordHead struct {
+// big endian byte order
+type _RecordHeadV6 struct {
 	size uint16	// include the size itself and trailing '\0' 
 	ttev byte	// truncated:1, type:3, bigendian:1, version:3
 	locusEnd uint8
-	port uint16
-	pid  uint16
+	pid  uint32
 	msec int64
+	port uint16
 }
 
 type _RecordMan struct {
-	pid uint16
+	pid uint32
 	ttev byte
 	locusEnd uint8
 	size uint16
@@ -42,10 +44,12 @@ type _RecordMan struct {
 
 var recPool = sync.Pool{
 	New: func() interface{} {
-		pid := uint16(os.Getpid())
+		pid := uint32(os.Getpid())
 		r := new(_RecordMan)
 		r.pid = pid
-		r.ttev = (record_TYPE_RAW << 4) | record_BIG_ENDIAN | (record_VERSION)
+		r.ttev = (_RECORD_TYPE_RAW << 4) | _RECORD_BIG_ENDIAN | (_RECORD_VERSION)
+		r.buf[4] = byte(pid >> 24)
+		r.buf[5] = byte(pid >> 16)
 		r.buf[6] = byte(pid >> 8)
 		r.buf[7] = byte(pid)
 		return r
@@ -53,7 +57,7 @@ var recPool = sync.Pool{
 }
 
 func (rec *_RecordMan) Reset() {
-	rec.off = record_HEAD_SIZE
+	rec.off = _RECORD_HEAD_SIZE
 	rec.locusEnd = 0
 	rec.size = 0
 }
@@ -71,7 +75,7 @@ func (rec *_RecordMan) SetIdentityTagLocus(identity, tag, locus string) {
 	rec.putMax(tag, TAG_MAX)
 	rec.WriteByte(' ')
 	rec.putMax(locus, LOCUS_MAX)
-	rec.locusEnd = uint8(rec.off - record_HEAD_SIZE)
+	rec.locusEnd = uint8(rec.off - _RECORD_HEAD_SIZE)
 	rec.WriteByte(' ')
 }
 
@@ -118,7 +122,7 @@ func (rec *_RecordMan) Bytes() []byte {
 	size := rec.off
 	if size <= len(rec.buf) {
 		// trim trailing '\r' and '\n'
-		for ; size > record_HEAD_SIZE; size-- {
+		for ; size > _RECORD_HEAD_SIZE; size-- {
 			c := rec.buf[size - 1]
 			if c != '\r' && c != '\n' {
 				break
@@ -148,7 +152,7 @@ func (rec *_RecordMan) BodyBytes() []byte {
 	if rec.size == 0 {
 		rec.Bytes()
 	}
-	return rec.buf[record_HEAD_SIZE:rec.size]
+	return rec.buf[_RECORD_HEAD_SIZE:rec.size]
 }
 
 func (rec *_RecordMan) Truncated() bool {
