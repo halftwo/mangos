@@ -11,6 +11,29 @@ import (
 	"halftwo/mangos/eax"
 )
 
+func TestCmac(t *testing.T) {
+	// from https://datatracker.ietf.org/doc/html/rfc4493
+	keyHex	:= "2b7e151628aed2a6abf7158809cf4f3c"
+	msgHex	:= "6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411"
+	macHex	:= "dfa66747de9ae63030ca32611497c827"
+
+	key, _ := hex.DecodeString(keyHex)
+	msg, _ := hex.DecodeString(msgHex)
+	mac, _ := hex.DecodeString(macHex)
+
+	blockCipher, _ := aes.NewCipher(key)
+	cmac, _ := eax.NewCmac(blockCipher)
+	cmac.Start()
+	cmac.Update(msg)
+	mac2 := make([]byte, 16)
+	cmac.Finish(mac2[:])
+	if !bytes.Equal(mac, mac2) {
+		fmt.Println("MAC", macHex)
+		fmt.Println("MAC2", hex.EncodeToString(mac2))
+		t.Errorf("Test failed")
+	}
+}
+
 func TestEax(t *testing.T) {
 	keyHex	  := "8395FCF1E95BEBD697BD010BC766AAC3"
         nonceHex  := "22E7ADD93CFC6393C57EC0B3C17D6B44"
