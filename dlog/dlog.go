@@ -215,15 +215,17 @@ func getLocus(skip int) (locus string) {
 	return
 }
 
-func UtcTimeString(t time.Time) string {
-	t2 := t.UTC()
-	fstr := fmt.Sprintf("060102%c150405", "umtwrfs"[t2.Weekday()])
-	return t2.Format(fstr)
-}
+func TimeString(t time.Time) string {
+	var buf [24]byte
+	b := t.AppendFormat(buf[:0], "060102+150405-0700")
+	b[6] = "umtwrfs"[t.Weekday()]
 
-func LocalTimeString(t time.Time) string {
-	fstr := fmt.Sprintf("060102%c150405", "umtwrfs"[t.Weekday()])
-	return t.Format(fstr)
+	// Remove trailing "00"
+	n := len(b)
+	if (b[n-2] == '0' && b[n-1] == '0') {
+		b = b[:n-2]
+	}
+	return string(b)
 }
 
 // Log send a dlog to dlogd. 
@@ -240,9 +242,7 @@ func (lg *Dlogger) Log(tag string, format string, a ...interface{}) {
 }
 
 func (lg *Dlogger) printStderr(rec *_RecordMan) {
-	now := time.Now()
-	fstr := fmt.Sprintf("060102%c150405", "umtwrfs"[now.Weekday()])
-	ts := now.Format(fstr)
+	ts := TimeString(time.Now())
 	fmt.Fprintf(os.Stderr, "%s :: %d+%d %s\n", ts, rec.pid, 0, rec.BodyBytes())
 }
 

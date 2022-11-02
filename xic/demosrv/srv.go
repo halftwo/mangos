@@ -33,7 +33,7 @@ type _TimeInArgs struct {
 }
 
 type _Times struct {
-	Utc string `vbs:"utc"`
+	Ctime string `vbs:"ctime"`
 	Local string `vbs:"local"`
 }
 
@@ -52,8 +52,8 @@ func (srv *_DemoServant) Xic_time(cur xic.Current, in _TimeInArgs, out *_TimeOut
 	}
 	out.Con = cur.Con().String()
 	out.Time = t.Unix()
-	out.Strftime.Utc = dlog.UtcTimeString(t)
-	out.Strftime.Local = dlog.LocalTimeString(t)
+	out.Strftime.Ctime = t.Format(time.ANSIC)
+	out.Strftime.Local = dlog.TimeString(t)
 	return nil
 }
 
