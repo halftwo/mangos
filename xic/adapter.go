@@ -22,7 +22,7 @@ type _Adapter struct {
 	engine *_Engine
 	name string
 	endpoints string
-	state _AdapterState
+	state _AdapterState	// atomic
 
 	listeners []*_Listener
 	srvMap sync.Map
@@ -52,8 +52,7 @@ func (l *_Listener) activate() {
 			}
 
 			// TODO
-			con := newIncomingConnection(l.adapter, c)
-			con.start()
+			newIncomingConnection(l.adapter, c)
 		}
 	}()
 }

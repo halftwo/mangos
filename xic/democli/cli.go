@@ -16,11 +16,11 @@ func run(engine xic.Engine, args []string) error {
 	quest.Set("hello", 1.25)
 	quest.Set("world", "All men are created equal")
 
-	var answer xic.Arguments
-	answer = xic.NewArguments()
+	answer := xic.NewArguments()
 	err = prx.Invoke("echo", quest, &answer)
 	fmt.Println(err, answer)
 
+	quest = xic.NewArguments()
 	answer = xic.NewArguments()
 	err = prx.Invoke("time", quest, &answer)
 	fmt.Println(err, answer)

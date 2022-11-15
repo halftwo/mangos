@@ -193,11 +193,15 @@ func (sb *SecretBox) GetContent() string {
 }
 
 func (sb *SecretBox) Find(service, endpoint string) (identity, password string) {
-	ep, err := parseEndpoint(endpoint)
+	ei, err := parseEndpoint(endpoint)
 	if err != nil {
-		return
+		return "", ""
 	}
-	return sb.find(service, ep.proto, ep.host, ep.port)
+	return sb.FindEndpoint(service, ei)
+}
+
+func (sb *SecretBox) FindEndpoint(service string, ei *EndpointInfo) (identity, password string) {
+	return sb.find(service, ei.proto, ei.host, ei.port)
 }
 
 func (sb *SecretBox) find(service, proto, host string, port uint16) (identity, password string) {

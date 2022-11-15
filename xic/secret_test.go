@@ -33,7 +33,7 @@ func TestSecretBox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id, pass := sb.Find("XXX", "+::1+3030")
+	id, pass := sb.Find("XXX", "@+::1+3030")
 	if id != "complex" || pass != "complicated" {
 		t.Log("id", id, "pass", pass)
 		t.Errorf("Bug in (*Secret).Find()")

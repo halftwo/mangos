@@ -1,7 +1,6 @@
 package xic
 
 import (
-	"fmt"
 	"sync/atomic"
 	"strings"
 
@@ -139,14 +138,15 @@ func (prx *_Proxy) pickConnection(q *_OutQuest) (*_Connection, error) {
 
 	if len(prx.cons) == 0 {
 		var con *_Connection
+		var err error
 		for _, ep := range prx.endpoints {
-			con = prx.engine.makeConnection(prx.service, ep)
+			con, err = prx.engine.makeConnection(prx.service, ep)
 			if con != nil {
 				break
 			}
 		}
 		if con == nil {
-			return nil, fmt.Errorf("No connection")
+			return nil, err
 		}
 		prx.cons = append(prx.cons, con)
 	}

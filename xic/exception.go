@@ -11,6 +11,7 @@ const (
 	ConnectionClosedException = "ConnectionClosedException"
 	ServiceNotFoundException = "ServiceNotFoundException"
 	MethodNotFoundException = "MethodNotFoundException"
+	AdapterAbsentException = "AdapterAbsentException"
 	// TODO
 )
 

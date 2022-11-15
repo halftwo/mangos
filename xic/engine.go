@@ -11,6 +11,9 @@ type _Engine struct {
 	name string
 	id string
 
+	shadowBox *ShadowBox
+	secretBox *SecretBox
+
 	adapterMap map[string]*_Adapter
 	proxyMap map[string]*_Proxy
 	outConMap map[string]*_Connection
@@ -150,20 +153,22 @@ func (engine *_Engine) makeFixedProxy(service string, con *_Connection) (Proxy, 
 	return prx, nil
 }
 
-func (engine *_Engine) makeConnection(serviceHint string, endpoint string) *_Connection {
+func (engine *_Engine) makeConnection(serviceHint string, endpoint string) (*_Connection, error) {
 	con, ok := engine.outConMap[endpoint]
 	if ok {
 		if con.IsLive() {
-			return con
+			return con, nil
 		}
 	}
 
-	con = newOutgoingConnection(engine, serviceHint, endpoint)
-	if con != nil {
-		engine.outConMap[endpoint] = con
-		con.start()
+	ei, err := parseEndpoint(endpoint)
+	if err != nil {
+		return nil, err
 	}
-	return con
+
+	con = newOutgoingConnection(engine, serviceHint, ei)
+	engine.outConMap[endpoint] = con
+	return con, nil
 }
 
 func (engine *_Engine) incomingConnection(con *_Connection) {

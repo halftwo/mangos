@@ -37,10 +37,12 @@ type _OutMessage interface {
 	Bytes() []byte
 }
 
+/*
 type _InMessage interface {
 	_Message
 	Args() Arguments
 }
+*/
 
 var commonHeaderBytes = [8]byte{'X','!'}
 

@@ -2,6 +2,7 @@ package xic
 
 import (
 	"reflect"
+	"time"
 )
 
 type EntreeFunction func(engine Engine, args []string) error
@@ -162,6 +163,7 @@ type Invoking struct {
 	Txid int64
 	In interface{}
 	Out interface{}
+	Deadline time.Time
 	Err error
 	Done chan *Invoking
 }
