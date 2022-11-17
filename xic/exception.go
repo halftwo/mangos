@@ -7,19 +7,19 @@ import (
 )
 
 const (
-	ProtocolException = "ProtocolException"
+	ProtocolException         = "ProtocolException"
 	ConnectionClosedException = "ConnectionClosedException"
-	ServiceNotFoundException = "ServiceNotFoundException"
-	MethodNotFoundException = "MethodNotFoundException"
-	AdapterAbsentException = "AdapterAbsentException"
+	ServiceNotFoundException  = "ServiceNotFoundException"
+	MethodNotFoundException   = "MethodNotFoundException"
+	AdapterAbsentException    = "AdapterAbsentException"
 	// TODO
 )
 
 type _Exception struct {
 	name string
 	code int
-	tag string
-	msg string
+	tag  string
+	msg  string
 	file string
 	line int
 	what string
@@ -27,7 +27,7 @@ type _Exception struct {
 
 func newEx(name string, code int, tag string, msg string) *_Exception {
 	_, file, line, _ := runtime.Caller(2)
-	ex := &_Exception{name:name, file:file, line:line, code:code, tag:tag, msg:msg}
+	ex := &_Exception{name: name, file: file, line: line, code: code, tag: tag, msg: msg}
 	return ex
 }
 
@@ -43,17 +43,17 @@ func NewExceptionCodeTag(name string, code int, tag string, msg string) *_Except
 	return newEx(name, code, tag, msg)
 }
 
-func NewExceptionf(name string, format string, a...interface{}) *_Exception {
+func NewExceptionf(name string, format string, a ...any) *_Exception {
 	msg := fmt.Sprintf(format, a...)
 	return newEx(name, 0, "", msg)
 }
 
-func NewExceptionCodef(name string, code int, format string, a...interface{}) *_Exception {
+func NewExceptionCodef(name string, code int, format string, a ...any) *_Exception {
 	msg := fmt.Sprintf(format, a...)
 	return newEx(name, code, "", msg)
 }
 
-func NewExceptionCodeTagf(name string, code int, tag string, format string, a...interface{}) *_Exception {
+func NewExceptionCodeTagf(name string, code int, tag string, format string, a ...any) *_Exception {
 	msg := fmt.Sprintf(format, a...)
 	return newEx(name, code, tag, msg)
 }
@@ -105,4 +105,3 @@ func (ex *_Exception) Error() string {
 	}
 	return ex.what
 }
-

@@ -1,9 +1,9 @@
 package xic
 
 import (
+	"bytes"
 	"fmt"
 	"math"
-	"bytes"
 
 	"halftwo/mangos/vbs"
 )
@@ -11,21 +11,21 @@ import (
 type MsgType byte
 
 const (
-	CheckMessage MsgType	= 'C'
-	HelloMessage		= 'H'
-	ByeMessage		= 'B'
-	QuestMessage		= 'Q'
-	AnswerMessage		= 'A'
+	CheckMessage  MsgType = 'C'
+	HelloMessage          = 'H'
+	ByeMessage            = 'B'
+	QuestMessage          = 'Q'
+	AnswerMessage         = 'A'
 )
 
 const headerSize = 8
 
 type _MessageHeader struct {
-	Magic byte	// 'X'
-	Version byte	// '!'
-	Type byte	// 'Q', 'A', 'H', 'B', 'C'
-	Flags byte	// 0x00 or 0x02
-	BodySize int32	// in big endian byte order
+	Magic    byte  // 'X'
+	Version  byte  // '!'
+	Type     byte  // 'Q', 'A', 'H', 'B', 'C'
+	Flags    byte  // 0x00 or 0x02
+	BodySize int32 // in big endian byte order
 }
 
 type _Message interface {
@@ -44,7 +44,7 @@ type _InMessage interface {
 }
 */
 
-var commonHeaderBytes = [8]byte{'X','!'}
+var commonHeaderBytes = [8]byte{'X', '!'}
 
 func fillHeader(packet []byte, t MsgType) {
 	size := len(packet) - 8
@@ -66,7 +66,6 @@ func fillHeader(packet []byte, t MsgType) {
 var theHelloMessage = _HelloMessage{}
 var theByeMessage = _ByeMessage{}
 
-
 type _HelloMessage struct {
 }
 
@@ -74,12 +73,11 @@ func (m _HelloMessage) Type() MsgType {
 	return 'H'
 }
 
-var helloMessageBytes = [8]byte{'X','!','H'}
+var helloMessageBytes = [8]byte{'X', '!', 'H'}
 
 func (m _HelloMessage) Bytes() []byte {
 	return helloMessageBytes[:]
 }
-
 
 type _ByeMessage struct {
 }
@@ -88,7 +86,7 @@ func (m _ByeMessage) Type() MsgType {
 	return 'B'
 }
 
-var byeMessageBytes = [8]byte{'X','!','B'}
+var byeMessageBytes = [8]byte{'X', '!', 'B'}
 
 func (m _ByeMessage) Bytes() []byte {
 	return byeMessageBytes[:]
@@ -97,9 +95,10 @@ func (m _ByeMessage) Bytes() []byte {
 type _OutCheck struct {
 	buf []byte
 }
+
 var _ _OutMessage = (*_OutCheck)(nil)
 
-func newOutCheck(cmd string, args interface{}) *_OutCheck {
+func newOutCheck(cmd string, args any) *_OutCheck {
 	b := &bytes.Buffer{}
 	enc := vbs.NewEncoder(b)
 	b.Write(commonHeaderBytes[:])
@@ -108,7 +107,7 @@ func newOutCheck(cmd string, args interface{}) *_OutCheck {
 	if err != nil {
 		panic("vbs.Encoder error")
 	}
-	c := &_OutCheck{buf:b.Bytes()}
+	c := &_OutCheck{buf: b.Bytes()}
 	fillHeader(c.buf, 'C')
 	return c
 }
@@ -121,17 +120,17 @@ func (c *_OutCheck) Bytes() []byte {
 	return c.buf
 }
 
-
 type _OutQuest struct {
-	txid int64
+	txid     int64
 	reserved int
-	start int
-	buf []byte
+	start    int
+	buf      []byte
 }
+
 var _ _OutMessage = (*_OutQuest)(nil)
 
-func newOutQuest(txid int64, service, method string, ctx Context, args interface{}) *_OutQuest {
-	q := &_OutQuest{txid:txid, start:-1}
+func newOutQuest(txid int64, service, method string, ctx Context, args any) *_OutQuest {
+	q := &_OutQuest{txid: txid, start: -1}
 	b := &bytes.Buffer{}
 	enc := vbs.NewEncoder(b)
 	b.Write(commonHeaderBytes[:])
@@ -177,15 +176,16 @@ func (q *_OutQuest) SetTxid(txid int64) {
 }
 
 type _OutAnswer struct {
-	txid int64
+	txid     int64
 	reserved int
-	start int
-	buf []byte
+	start    int
+	buf      []byte
 }
+
 var _ _OutMessage = (*_OutAnswer)(nil)
 
-func newOutAnswer(status int, args interface{}) *_OutAnswer {
-	a := &_OutAnswer{txid:-1, start:-1}
+func newOutAnswer(status int, args any) *_OutAnswer {
+	a := &_OutAnswer{txid: -1, start: -1}
 	b := &bytes.Buffer{}
 	enc := vbs.NewEncoder(b)
 	b.Write(commonHeaderBytes[:])
@@ -201,11 +201,11 @@ func newOutAnswer(status int, args interface{}) *_OutAnswer {
 	return a
 }
 
-func newOutAnswerNormal(args interface{}) *_OutAnswer {
+func newOutAnswerNormal(args any) *_OutAnswer {
 	return newOutAnswer(0, args)
 }
 
-func newOutAnswerExceptional(args interface{}) *_OutAnswer {
+func newOutAnswerExceptional(args any) *_OutAnswer {
 	return newOutAnswer(-1, args)
 }
 
@@ -238,10 +238,10 @@ func (a *_OutAnswer) SetTxid(txid int64) {
 
 type _InMsg struct {
 	argsOff int
-	buf []byte
+	buf     []byte
 }
 
-func (m *_InMsg) DecodeArgs(args interface{}) error {
+func (m *_InMsg) DecodeArgs(args any) error {
 	dec := vbs.NewDecoderBytes(m.buf[m.argsOff:])
 	err := dec.Decode(args)
 	if err != nil {
@@ -271,10 +271,10 @@ func (q *_InCheck) Type() MsgType {
 }
 
 type _InQuest struct {
-	txid int64
+	txid    int64
 	service string
-	method string
-	ctx Context
+	method  string
+	ctx     Context
 	_InMsg
 }
 
@@ -295,7 +295,7 @@ func (q *_InQuest) Type() MsgType {
 }
 
 type _InAnswer struct {
-	txid int64
+	txid   int64
 	status int
 	_InMsg
 }
@@ -341,4 +341,3 @@ func DecodeMessage(header _MessageHeader, buf []byte) (_Message, error) {
 	}
 	return msg, nil
 }
-

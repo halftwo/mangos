@@ -3,6 +3,7 @@ package xic
 import (
 	"fmt"
 	"sync"
+	"os"
 )
 
 type _Engine struct {
@@ -18,7 +19,7 @@ type _Engine struct {
 	proxyMap map[string]*_Proxy
 	outConMap map[string]*_Connection
 	inConList []*_Connection
-	done chan struct{}
+	shutdownChan chan os.Signal
 }
 
 func newEngine() *_Engine {
@@ -32,8 +33,12 @@ func newEngineSetting(setting Setting) *_Engine {
 func newEngineSettingName(setting Setting, name string) *_Engine {
 	// TODO
 	id := GenerateRandomBase57Id(23)
-	done := make(chan struct{}, 1)
-	engine := &_Engine{setting:setting, name:name, id:id, done:done}
+	engine := &_Engine{
+		setting: setting,
+		name: name,
+		id: id,
+		shutdownChan: make(chan os.Signal, 1),
+	}
 	engine.adapterMap = make(map[string]*_Adapter)
 	engine.proxyMap = make(map[string]*_Proxy)
 	engine.outConMap = make(map[string]*_Connection)
@@ -116,7 +121,24 @@ func (engine *_Engine) StringToProxy(proxy string) (Proxy, error) {
 	return prx, nil
 }
 
+// implements os.Signal interface
+type PseudoShutdownSignal struct{}
+func (s PseudoShutdownSignal) String() string { return "shutdown" }
+func (s PseudoShutdownSignal) Signal() {}
+
+
 func (engine *_Engine) Shutdown() {
+	engine.shutdownChan<- PseudoShutdownSignal{}
+}
+
+func (engine *_Engine) WaitForShutdown() {
+	sig := <-engine.shutdownChan
+	if _, ok := sig.(PseudoShutdownSignal); ok {
+		fmt.Println("WaitForShutdown: method Shutdown called")
+	} else {
+		fmt.Println("WaitForShutdown: signal", sig.String(), "received")
+	}
+
 	// TODO
 	inConList := engine.inConList
 	engine.inConList = nil
@@ -128,15 +150,6 @@ func (engine *_Engine) Shutdown() {
 	}
 	for _, c := range outConMap {
 		c.grace()
-	}
-	close(engine.done)
-}
-
-func (engine *_Engine) WaitForShutdown() {
-	// TODO
-
-	select {
-	case <-engine.done:
 	}
 }
 

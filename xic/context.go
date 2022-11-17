@@ -5,7 +5,7 @@ import (
 )
 
 // Do not be confused with context.Context
-type Context map[string]interface{}
+type Context map[string]any
 
 func NewContext() Context {
 	return Context{}
@@ -16,7 +16,7 @@ func (ctx Context) Has(name string) bool {
 	return ok
 }
 
-func (ctx Context) Get(name string) interface{} {
+func (ctx Context) Get(name string) any {
 	return ctx[name]
 }
 
@@ -86,7 +86,7 @@ func (ctx Context) GetBlob(name string, dft []byte) []byte {
 	return dft
 }
 
-func (ctx Context) Set(name string, x interface{}) {
+func (ctx Context) Set(name string, x any) {
 	v := reflect.ValueOf(x)
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
@@ -115,4 +115,3 @@ func (ctx Context) Set(name string, x interface{}) {
 	}
 	ctx[name] = x
 }
-

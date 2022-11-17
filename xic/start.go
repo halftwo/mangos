@@ -4,6 +4,7 @@ import (
 	"os"
 	"fmt"
 	"strings"
+	"os/signal"
 )
 
 func usage() {
@@ -70,8 +71,9 @@ func StartSetting(run EntreeFunction, setting Setting) error {
 
 	// TODO
 	engine := newEngineSetting(setting)
+	signal.Notify(engine.shutdownChan, os.Interrupt)
+	install_additional_signals(engine)
 	err := run(engine, args)
-	engine.Shutdown()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ERROR:", err)
 		usage()

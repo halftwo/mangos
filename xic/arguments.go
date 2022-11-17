@@ -2,26 +2,26 @@ package xic
 
 import (
 	"fmt"
-	"reflect"
 	"math"
+	"reflect"
 
 	"halftwo/mangos/vbs"
 )
 
-type Arguments map[string]interface{}
+type Arguments map[string]any
 
 func NewArguments() Arguments {
-	return make(map[string]interface{})
+	return make(map[string]any)
 }
 
-func (args Arguments) CopyFrom(rhs interface{}) error {
+func (args Arguments) CopyFrom(rhs any) error {
 	return assignMap(reflect.ValueOf(args), reflect.ValueOf(rhs))
 }
 
-func (args Arguments) CopyTo(x interface{}) error {
+func (args Arguments) CopyTo(x any) error {
 	v := reflect.ValueOf(x)
 	if v.Kind() != reflect.Ptr || v.IsNil() {
-		return fmt.Errorf("The parameter shoud be pointer to struct or map[string]interface{}")
+		return fmt.Errorf("The parameter shoud be pointer to struct or map[string]any")
 	}
 
 	var err error
@@ -31,7 +31,7 @@ func (args Arguments) CopyTo(x interface{}) error {
 	case reflect.Struct:
 		err = args.ArgStruct(v.Interface())
 	default:
-		err = fmt.Errorf("The parameter shoud be pointer to struct or map[string]interface{}")
+		err = fmt.Errorf("The parameter shoud be pointer to struct or map[string]any")
 	}
 	return err
 }
@@ -41,7 +41,7 @@ func (args Arguments) Has(name string) bool {
 	return ok
 }
 
-func (args Arguments) Get(name string) interface{} {
+func (args Arguments) Get(name string) any {
 	return args[name]
 }
 
@@ -120,7 +120,7 @@ func (args Arguments) GetBlobDefault(name string, dft []byte) []byte {
 	return dft
 }
 
-func (args Arguments) checkInterface(name string, kind reflect.Kind, p interface{}) (interface{}, reflect.Value, error) {
+func (args Arguments) checkInterface(name string, kind reflect.Kind, p any) (any, reflect.Value, error) {
 	x := reflect.ValueOf(p)
 	if x.Kind() != reflect.Ptr || x.IsNil() || x.Elem().Kind() != kind {
 		return nil, reflect.Value{}, fmt.Errorf("The second parameter should be pointer to %v", kind)
@@ -141,7 +141,7 @@ func (args Arguments) checkInterface(name string, kind reflect.Kind, p interface
 	return v, x.Elem(), nil
 }
 
-func (args Arguments) GetSlice(name string, p interface{}) error {
+func (args Arguments) GetSlice(name string, p any) error {
 	v, x, err := args.checkInterface(name, reflect.Slice, p)
 	if err != nil {
 		return err
@@ -151,7 +151,7 @@ func (args Arguments) GetSlice(name string, p interface{}) error {
 	return err
 }
 
-func (args Arguments) GetMap(name string, p interface{}) error {
+func (args Arguments) GetMap(name string, p any) error {
 	v, x, err := args.checkInterface(name, reflect.Map, p)
 	if err != nil {
 		return err
@@ -161,7 +161,7 @@ func (args Arguments) GetMap(name string, p interface{}) error {
 	return err
 }
 
-func (args Arguments) GetStruct(name string, p interface{}) error {
+func (args Arguments) GetStruct(name string, p any) error {
 	v, x, err := args.checkInterface(name, reflect.Struct, p)
 	if err != nil {
 		return err
@@ -188,7 +188,7 @@ func (args Arguments) GetStruct(name string, p interface{}) error {
 	return nil
 }
 
-func (args Arguments) SetArgStruct(p interface{}) error {
+func (args Arguments) SetArgStruct(p any) error {
 	x := reflect.ValueOf(p)
 	if x.Kind() == reflect.Ptr {
 		if !x.IsNil() {
@@ -216,7 +216,7 @@ func (args Arguments) SetArgStruct(p interface{}) error {
 	return nil
 }
 
-func (args Arguments) ArgStruct(p interface{}) error {
+func (args Arguments) ArgStruct(p any) error {
 	x := reflect.ValueOf(p)
 	if x.Kind() != reflect.Ptr || x.IsNil() || x.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("The parameter should be pointer to struct")
@@ -562,7 +562,7 @@ func assignValue(lhs, rhs reflect.Value) error {
 	return err
 }
 
-func (args Arguments) Set(name string, x interface{}) error {
+func (args Arguments) Set(name string, x any) error {
 	v := reflect.ValueOf(x)
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
@@ -620,8 +620,8 @@ func checkMap(v reflect.Value) error {
 	return nil
 }
 
-func structToMap(v reflect.Value) interface{} {
-	m := map[string]interface{}{}
+func structToMap(v reflect.Value) any {
+	m := map[string]any{}
 	fields := vbs.CachedStructFields(v.Type())
 	for _, f := range fields {
 		value := v.Field(f.Index)
@@ -633,4 +633,3 @@ func structToMap(v reflect.Value) interface{} {
 	}
 	return m
 }
-

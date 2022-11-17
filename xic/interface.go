@@ -2,7 +2,6 @@ package xic
 
 import (
 	"reflect"
-	"time"
 )
 
 type EntreeFunction func(engine Engine, args []string) error
@@ -49,10 +48,10 @@ type Engine interface {
 }
 
 type MethodInfo struct {
-	name string
-	method reflect.Method
-	oneway bool
-	inType reflect.Type
+	name    string
+	method  reflect.Method
+	oneway  bool
+	inType  reflect.Type
 	outType reflect.Type
 }
 
@@ -90,15 +89,13 @@ type Current interface {
 type Servant interface {
 	/*
 	   Twoway method
-	   Xic_xyz(cur Current, *ArgsIn, *ArgsOut) error
+	   Xic_xyz(cur Current, in *ArgsIn, out *ArgsOut) error
 
 	   Oneway method
-	   Xic_xyz(cur Current, *ArgsIn) error
+	   Xic_xyz(cur Current, in *ArgsIn) error
 	*/
 	Xic(cur Current, in Arguments, out *Arguments) error
 }
-
-
 
 type LoadBalance int
 
@@ -123,16 +120,16 @@ type Proxy interface {
 
 	TimedProxy(timeout, closeTimeout, connectTimeout int) Proxy
 
-	// in must be (pointer to) struct or map[string]interface{}
-	// out must be pointer to struct or map[string]interface{}
-	Invoke(method string, in interface{}, out interface{}) error
-	InvokeCtx(ctx Context, method string, in interface{}, out interface{}) error
+	// in must be (pointer to) struct or map[string]any
+	// out must be pointer to struct or map[string]any
+	Invoke(method string, in, out any) error
+	InvokeCtx(ctx Context, method string, in, out any) error
 
-	InvokeAsync(method string, in interface{}, out interface{}, done chan *Invoking) *Invoking
-	InvokeCtxAsync(ctx Context, method string, in interface{}, out interface{}, done chan *Invoking) *Invoking
+	InvokeAsync(method string, in, out any) Result
+	InvokeCtxAsync(ctx Context, method string, in, out any) Result
 
-	InvokeOneway(method string, in interface{}) error
-	InvokeCtxOneway(ctx Context, method string, in interface{}) error
+	InvokeOneway(method string, in any) error
+	InvokeCtxOneway(ctx Context, method string, in any) error
 }
 
 type Connection interface {
@@ -148,7 +145,6 @@ type Connection interface {
 	Endpoint() string
 }
 
-
 type Exception interface {
 	error
 	Exname() string
@@ -159,49 +155,16 @@ type Exception interface {
 	Line() int
 }
 
-type Invoking struct {
-	Txid int64
-	In interface{}
-	Out interface{}
-	Deadline time.Time
-	Err error
-	Done chan *Invoking
-}
-
-
-/*
 type Result interface {
-	Connection() Connection
-	Proxy() Proxy
-	Quest() Quest
+	Txid() int64
+	Service() string
+	Method() string
+	In() any
 
-	IsSent() bool
-	IsCompleted() bool
+	Wait()		// wait until out or err is set
+	Done() bool
 
-	WaitForSent()
-	WaitForCompleted()
-
-	TakeAnswer() Answer
-}
-*/
-
-/*
-type Waiter interface {
-	Connection() Connection
-	Quest() Quest
-
-	Respond(answer Answer)
-	RespondException(ex Exception)
+	Out() any	// Don't call it before Wait() returns or Done() returns true
+	Err() error	// Don't call it before Wait() returns or Done() returns true
 }
 
-type CompletionCallback func(Result)
-
-type Completion interface {
-	Completed(Result)
-}
-
-type SentCompletion interface {
-	Completion
-	Sent(Result)
-}
-*/

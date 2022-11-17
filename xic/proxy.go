@@ -1,20 +1,22 @@
 package xic
 
 import (
-	"sync/atomic"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"halftwo/mangos/xstr"
 )
 
 type _Proxy struct {
-	engine *_Engine
-	service string
-	str string
-	lb LoadBalance
-	fixed bool
-	ctx atomic.Value	// Context
-	cons []*_Connection
+	engine    *_Engine
+	service   string
+	str       string
+	lb        LoadBalance
+	fixed     bool
+	ctx       atomic.Value // Context
+	cons      []*_Connection
 	endpoints []string
 }
 
@@ -35,7 +37,7 @@ func newProxy(engine *_Engine, proxy string) *_Proxy {
 	tk := xstr.NewTokenizerSpace(sp.Next())
 
 	service := tk.Next()
-	prx := &_Proxy{engine:engine, service:service}
+	prx := &_Proxy{engine: engine, service: service}
 	prx.ctx.Store(Context{})
 
 	for tk.HasMore() {
@@ -77,7 +79,7 @@ func newProxy(engine *_Engine, proxy string) *_Proxy {
 }
 
 func newProxyConnection(engine *_Engine, service string, con *_Connection) *_Proxy {
-	prx := &_Proxy{engine:engine, service:service, str:service}
+	prx := &_Proxy{engine: engine, service: service, str: service}
 	prx.ctx.Store(Context{})
 	if con != nil {
 		prx.fixed = true
@@ -132,7 +134,6 @@ func (prx *_Proxy) TimedProxy(timeout, closeTimeout, connectTimeout int) Proxy {
 	return prx2
 }
 
-
 func (prx *_Proxy) pickConnection(q *_OutQuest) (*_Connection, error) {
 	// TODO
 
@@ -153,23 +154,56 @@ func (prx *_Proxy) pickConnection(q *_OutQuest) (*_Connection, error) {
 	return prx.cons[0], nil
 }
 
-func (prx *_Proxy) Invoke(method string, in interface{}, out interface{}) error {
+type _Result struct {
+	txid     int64
+	service  string
+	method   string
+	in       any
+	out      any
+	deadline time.Time
+	err      error
+	done     atomic.Bool
+	mtx      sync.Mutex
+	cond     sync.Cond
+}
+
+func (r *_Result) Txid() int64     { return r.txid }
+func (r *_Result) Service() string { return r.service }
+func (r *_Result) Method() string  { return r.method }
+func (r *_Result) In() any         { return r.in }
+func (r *_Result) Out() any        { return r.out }
+func (r *_Result) Err() error      { return r.err }
+func (r *_Result) Done() bool      { return r.done.Load() }
+
+func (r *_Result) Wait() {
+	r.cond.L.Lock()
+	for !r.done.Load() {
+		r.cond.Wait()
+	}
+	r.cond.L.Unlock()
+}
+
+func (r *_Result) broadcast() {
+	r.cond.L.Lock()
+	r.done.Store(true)
+	r.cond.Broadcast()
+	r.cond.L.Unlock()
+}
+
+func (prx *_Proxy) Invoke(method string, in, out any) error {
 	return prx.InvokeCtx(prx.Context(), method, in, out)
 }
 
-func (prx *_Proxy) InvokeCtx(ctx Context, method string, in interface{}, out interface{}) error {
-	ivk := prx.InvokeCtxAsync(ctx, method, in, out, nil)
-	select {
-	case <-ivk.Done:
-	}
-	return ivk.Err
+func (prx *_Proxy) InvokeCtx(ctx Context, method string, in, out any) error {
+	result := prx.InvokeCtxAsync(ctx, method, in, out)
+	return result.Err()
 }
 
-func (prx *_Proxy) InvokeOneway(method string, in interface{}) error {
+func (prx *_Proxy) InvokeOneway(method string, in any) error {
 	return prx.InvokeCtxOneway(prx.Context(), method, in)
 }
 
-func (prx *_Proxy) InvokeCtxOneway(ctx Context, method string, in interface{}) error {
+func (prx *_Proxy) InvokeCtxOneway(ctx Context, method string, in any) error {
 	q := newOutQuest(0, prx.service, method, ctx, in)
 	con, err := prx.pickConnection(q)
 	if err != nil {
@@ -180,26 +214,20 @@ func (prx *_Proxy) InvokeCtxOneway(ctx Context, method string, in interface{}) e
 	return nil
 }
 
-func (prx *_Proxy) InvokeAsync(method string, in interface{}, out interface{}, done chan *Invoking) *Invoking {
-	return prx.InvokeCtxAsync(prx.Context(), method, in, out, done)
+func (prx *_Proxy) InvokeAsync(method string, in, out any) Result {
+	return prx.InvokeCtxAsync(prx.Context(), method, in, out)
 }
 
-func (prx *_Proxy) InvokeCtxAsync(ctx Context, method string, in interface{}, out interface{}, done chan *Invoking) *Invoking {
-	if done == nil {
-		done = make(chan *Invoking, 1)
-	} else if cap(done) == 0 {
-		panic("cap(done) == 0")
-	}
-
-	ivk := &Invoking{Txid:-1, In:in, Out:out, Done:done}
+func (prx *_Proxy) InvokeCtxAsync(ctx Context, method string, in, out any) Result {
+	res := &_Result{txid: -1, service: prx.service, method: method, in: in, out: out}
+	res.cond.L = &res.mtx
 	q := newOutQuest(-1, prx.service, method, ctx, in)
 	con, err := prx.pickConnection(q)
 	if err != nil {
-		ivk.Err = err
-		ivk.Done <- ivk
+		res.err = err
+		res.broadcast()
 	} else {
-		con.invoke(prx, q, ivk)
+		con.invoke(prx, q, res)
 	}
-	return ivk
+	return res
 }
-

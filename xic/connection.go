@@ -1,32 +1,31 @@
 package xic
 
 import (
-	"fmt"
-	"net"
 	"bytes"
-	"strings"
+	"container/list"
+	"encoding/binary"
 	"errors"
-	"sync"
+	"fmt"
+	"math/big"
+	"net"
 	"reflect"
 	"runtime"
+	"strings"
+	"sync"
 	"sync/atomic"
-	"encoding/binary"
-	"math/big"
-	"container/list"
 
 	"halftwo/mangos/dlog"
 	"halftwo/mangos/srp6a"
 )
 
-
 type _Current struct {
 	_InQuest
-	con *_Connection
+	con  *_Connection
 	args Arguments
 }
 
 func newCurrent(con *_Connection, q *_InQuest) *_Current {
-	return &_Current{_InQuest:*q, con:con}
+	return &_Current{_InQuest: *q, con: con}
 }
 
 func (cur *_Current) Txid() int64 {
@@ -57,39 +56,37 @@ func (cur *_Current) Con() Connection {
 	return cur.con
 }
 
-
-type _ConState int32
 const (
-	con_INIT _ConState = iota
-	con_WAITING_HELLO	// client waiting for server hello message
+	con_INIT          int32 = iota
+	con_WAITING_HELLO           // client waiting for server hello message
 	con_ACTIVE
-	con_CLOSE		// Close is called
-	con_CLOSING		// graceful closing is in process
+	con_CLOSE   // Close is called
+	con_CLOSING // graceful closing is in process
 	con_CLOSED
 	con_ERROR
 )
 
 type _Connection struct {
-	c net.Conn
-	state _ConState		// atomic
-	engine *_Engine
-	incoming bool
-	adapter atomic.Value	// Adapter
-	serviceHint string
-	cipher *_Cipher
-	timeout int
-	concurrent int
-	endpoint *EndpointInfo
-	lastTxid int64
-	pending map[int64]*Invoking
-	mq *list.List
-	mutex sync.Mutex
-	err error
+	c		net.Conn
+	state		atomic.Int32
+	engine          *_Engine
+	incoming        bool
+	adapter         atomic.Value // Adapter
+	serviceHint     string
+	cipher          *_Cipher
+	timeout         int
+	concurrent      int
+	endpoint        *EndpointInfo
+	lastTxid        int64
+	pending         map[int64]*_Result
+	mq              *list.List
+	mutex           sync.Mutex
+	err             error
 }
 
 func _newConnection(engine *_Engine, incoming bool) *_Connection {
-	con := &_Connection{engine:engine, incoming:incoming}
-	con.pending = make(map[int64]*Invoking)
+	con := &_Connection{engine: engine, incoming: incoming}
+	con.pending = make(map[int64]*_Result)
 	con.mq = list.New()
 	return con
 }
@@ -125,8 +122,7 @@ func (con *_Connection) String() string {
 }
 
 func (con *_Connection) IsLive() bool {
-	state := _ConState(atomic.LoadInt32((*int32)(&con.state)))
-	return state < con_CLOSE
+        return con.state.Load() < con_CLOSE
 }
 
 func (con *_Connection) Incoming() bool {
@@ -149,10 +145,10 @@ func (con *_Connection) Close(force bool) {
 
 	pending := con.pending
 	con.pending = nil
-	for _, ivk := range pending {
+	for _, res := range pending {
 		ex := NewException(ConnectionClosedException, "")
-		ivk.Err = ex
-		ivk.Done <- ivk
+		res.err = ex
+		res.broadcast()
 	}
 }
 
@@ -161,12 +157,11 @@ func (con *_Connection) CreateProxy(service string) (Proxy, error) {
 		return nil, errors.New("Service name can't contain '@'")
 	}
 	if con.pending == nil {
-		con.pending = make(map[int64]*Invoking)
+		con.pending = make(map[int64]*_Result)
 	}
 	prx, err := con.engine.makeFixedProxy(service, con)
 	return prx, err
 }
-
 
 func (con *_Connection) Adapter() Adapter {
 	a := con.adapter.Load()
@@ -182,25 +177,24 @@ func (con *_Connection) SetAdapter(adapter Adapter) {
 	con.mutex.Unlock()
 }
 
-func (con *_Connection) generateTxid() int64 {
+func (con *_Connection) _generate_txid() int64 {
 	con.lastTxid++
 	if con.lastTxid < 0 {
 		con.lastTxid = 1
 	}
-	txid := con.lastTxid
-	return txid
+	return con.lastTxid
 }
 
-func (con *_Connection) invoke(prx *_Proxy, q *_OutQuest, vk *Invoking) error {
-	if vk != nil && vk.Txid != 0 {
+func (con *_Connection) invoke(prx *_Proxy, q *_OutQuest, res *_Result) error {
+	if res != nil && res.txid != 0 {
 		con.mutex.Lock()
-		txid := con.generateTxid()
-		vk.Txid = txid
-		con.pending[txid] = vk
+		txid := con._generate_txid()
+		res.txid = txid
+		con.pending[txid] = res
 		q.SetTxid(txid)
 		con.mutex.Unlock()
 	}
-	con.sendMsg(q)
+	con.sendMessage(q)
 	return nil
 }
 
@@ -211,7 +205,7 @@ func (con *_Connection) shut() {
 
 func (con *_Connection) grace() {
 	// TODO
-	con.sendMsg(theByeMessage)
+	con.send_msg(theByeMessage)
 }
 
 func makePointerValue(t reflect.Type) reflect.Value {
@@ -229,42 +223,41 @@ func makePointerValue(t reflect.Type) reflect.Value {
 	return p
 }
 
-
 type _ForbiddenArgs struct {
-	Reason string	`vbs:"reason"`
+	Reason string `vbs:"reason"`
 }
 type _AuthArgs struct {
-	Method string	`vbs:"method"`
+	Method string `vbs:"method"`
 }
 type _S1Args struct {
-	I string	`vbs:"I"`
+	I string `vbs:"I"`
 }
 type _S2Args struct {
-	Hash string	`vbs:"hash"`
-	N []byte	`vbs:"N"`
-	Gen []byte	`vbs:"g"`
-	Salt []byte	`vbs:"s"`
-	B []byte	`vbs:"B"`
+	Hash string `vbs:"hash"`
+	N    []byte `vbs:"N"`
+	Gen  []byte `vbs:"g"`
+	Salt []byte `vbs:"s"`
+	B    []byte `vbs:"B"`
 }
 type _S3Args struct {
-	A []byte	`vbs:"A"`
-	M1 []byte	`vbs:"M1"`
+	A  []byte `vbs:"A"`
+	M1 []byte `vbs:"M1"`
 }
 type _S4Args struct {
-	M2 []byte	`vbs:"M2"`
-	Cipher string	`vbs:"CIPHER"`
-	Mode int	`vbs:"MODE"`
+	M2     []byte `vbs:"M2"`
+	Cipher string `vbs:"CIPHER"`
+	Mode   int    `vbs:"MODE"`
 }
 
 func (con *_Connection) check_send(cmd string, args any) bool {
 	msg := newOutCheck(cmd, args)
-	con.sendMsg(msg)
+	con.send_msg(msg)
 	// TODO
 	return con.err == nil
 }
 
 func (con *_Connection) check_expect(cmd string, args any) bool {
-	msg := con.readMsg()
+	msg := con.read_msg()
 	check, ok := msg.(*_InCheck)
 	if !ok || check.cmd != cmd {
 		// TODO
@@ -276,11 +269,11 @@ func (con *_Connection) check_expect(cmd string, args any) bool {
 
 const (
 	ck_AUTHENTICATE = "AUTHENTICATE"
-	ck_FORBIDDEN = "FORBIDDEN"
-	ck_SRP6a1 = "SRP6a1"
-	ck_SRP6a2 = "SRP6a2"
-	ck_SRP6a3 = "SRP6a3"
-	ck_SRP6a4 = "SRP6a4"
+	ck_FORBIDDEN    = "FORBIDDEN"
+	ck_SRP6a1       = "SRP6a1"
+	ck_SRP6a2       = "SRP6a2"
+	ck_SRP6a3       = "SRP6a3"
+	ck_SRP6a4       = "SRP6a4"
 )
 
 func (con *_Connection) server_handshake() {
@@ -330,22 +323,18 @@ func (con *_Connection) server_handshake() {
 
 		var s4 _S4Args
 		s4.M2 = srp6svr.ComputeM2()
-		s4.Cipher = "AES128-EAX"	// TEST
-		s4.Mode = 1			// TEST
-		if !con.check_send(ck_SRP6a4, &s4) {
-			return
+		s4.Cipher = "AES128-EAX" // TEST
+		s4.Mode = 1
+		con.send_msg(theHelloMessage)
+		if err != nil {
+			// TODO
 		}
 	}
-
-	err := con.sendMsg(theHelloMessage)
-	if err != nil {
-		// TODO
-	}
-	con.state = con_ACTIVE
+	con.state.Store(con_ACTIVE)
 }
 
 func (con *_Connection) client_handshake() {
-	msg := con.readMsg()
+	msg := con.read_msg()
 
 	if msg != nil && msg.Type() == 'C' {
 		var auth _AuthArgs
@@ -382,7 +371,7 @@ func (con *_Connection) client_handshake() {
 		con.check_expect(ck_SRP6a2, &s2)
 		g := new(big.Int).SetBytes(s2.Gen)
 		srp6cl.SetHash(s2.Hash)
-		srp6cl.SetParameter(int(g.Int64()), s2.N, len(s2.N) * 8)
+		srp6cl.SetParameter(int(g.Int64()), s2.N, len(s2.N)*8)
 		srp6cl.SetSalt(s2.Salt)
 		srp6cl.SetB(s2.B)
 
@@ -404,7 +393,7 @@ func (con *_Connection) client_handshake() {
 			return
 		}
 
-		msg = con.readMsg()
+		msg = con.read_msg()
 	}
 
 	if msg != nil && msg.Type() != 'H' {
@@ -412,7 +401,7 @@ func (con *_Connection) client_handshake() {
 		return
 	}
 
-	con.state = con_ACTIVE
+	con.state.Store(con_ACTIVE)
 }
 
 func (con *_Connection) server_run() {
@@ -432,7 +421,7 @@ func (con *_Connection) client_run() {
 	ei := con.endpoint
 	con.c, err = net.Dial(ei.proto, ei.Address())
 	if err != nil {
-		con.state = con_ERROR
+		con.state.Store(con_ERROR)
 		// TODO
 		return
 	}
@@ -509,7 +498,7 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 				outErr.Set("code", ex.Code())
 				outErr.Set("tag", ex.Tag())
 				outErr.Set("message", ex.Message())
-				detail := map[string]interface{}{"file":ex.File(), "line":ex.Line()}
+				detail := map[string]any{"file": ex.File(), "line": ex.Line()}
 				outErr.Set("detail", detail)
 			} else {
 				outErr.Set("message", err.Error())
@@ -520,14 +509,14 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 		}
 
 		answer.SetTxid(quest.txid)
-		con.sendMsg(answer)
+		con.sendMessage(answer)
 	} else if err != nil {
 		// TODO: log the error
 	}
 }
 
 func (con *_Connection) handleAnswer(answer *_InAnswer) {
-	ivk, ok := con.pending[answer.txid]
+	res, ok := con.pending[answer.txid]
 	if !ok {
 		dlog.Log("WARNING", "Unknown answer with txid=%d", answer.txid)
 		return
@@ -536,18 +525,18 @@ func (con *_Connection) handleAnswer(answer *_InAnswer) {
 
 	if answer.status != 0 {
 		args := NewArguments()
-		ivk.Err = answer.DecodeArgs(args)
-		if ivk.Err == nil {
-			ivk.Err = &_Exception{name:args.GetString("exname"),
-					code:int(args.GetInt("code")),
-					tag:args.GetString("tag"),
-					msg:args.GetString("message")}
+		res.err = answer.DecodeArgs(args)
+		if res.err == nil {
+			res.err = &_Exception{name: args.GetString("exname"),
+				code: int(args.GetInt("code")),
+				tag:  args.GetString("tag"),
+				msg:  args.GetString("mess age")}
 		}
 	} else {
-		ivk.Err = answer.DecodeArgs(ivk.Out)
+		res.err = answer.DecodeArgs(res.out)
 	}
 
-	ivk.Done <- ivk
+	res.broadcast()
 }
 
 func checkHeader(header _MessageHeader) error {
@@ -573,12 +562,12 @@ func checkHeader(header _MessageHeader) error {
 	return nil
 }
 
-func ZZZ(x ...interface{}) {
+func ZZZ(x ...any) {
 	_, file, line, _ := runtime.Caller(1)
 	fmt.Println("XXX", file, line, x)
 }
 
-func (con *_Connection) readMsg() _Message {
+func (con *_Connection) read_msg() _Message {
 	var header _MessageHeader
 	if con.err = binary.Read(con.c, binary.BigEndian, &header); con.err != nil {
 		return nil
@@ -603,16 +592,27 @@ func (con *_Connection) readMsg() _Message {
 	return msg
 }
 
-func (con *_Connection) sendMsg(msg _OutMessage) error {
+func (con *_Connection) send_msg(msg _OutMessage) error {
 	buf := msg.Bytes()
 	_, err := con.c.Write(buf)
 	return err
 }
 
+func (con *_Connection) sendMessage(msg _OutMessage) error {
+	// TODO
+	con.mq.PushBack(msg)
+	// TODO: notify send_loop
+	return nil
+}
 
 func (con *_Connection) send_loop() {
 	for {
-		// TODO
+		//var e *list.Element
+		for e := con.mq.Front(); e != nil; e = con.mq.Front() {
+			m := con.mq.Remove(e)
+			con.send_msg(m.(_OutMessage))
+		}
+		// TODO: wait for new msg in the mq
 	}
 }
 
@@ -620,7 +620,7 @@ func (con *_Connection) process_loop() {
 	go con.send_loop()
 
 	for {
-		msg := con.readMsg()
+		msg := con.read_msg()
 		if msg == nil {
 			break
 		}
@@ -660,4 +660,3 @@ func (con *_Connection) process_loop() {
 		con.grace()
 	}
 }
-

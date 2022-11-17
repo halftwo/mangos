@@ -6,7 +6,7 @@ import (
 
 func TestArguments(t *testing.T) {
 	args := NewArguments()
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	m["a"] = 1.2345
 	m["b"] = "faint"
 	m["c"] = 666
@@ -16,9 +16,9 @@ func TestArguments(t *testing.T) {
 	t.Log(args.Get("hello"))
 
 	type Params struct {
-		A float32	`vbs:"a"`
-		B string	`vbs:"b"`
-		C interface{}	`vbs:"c"`
+		A float32 `vbs:"a"`
+		B string  `vbs:"b"`
+		C any     `vbs:"c"`
 	}
 	var p Params
 	err := args.GetStruct("world", &p)
@@ -30,7 +30,7 @@ func TestArguments(t *testing.T) {
 
 func TestArgumentsCopy(t *testing.T) {
 	a := NewArguments()
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	m["a"] = 1.2345
 	m["b"] = "faint"
 	m["c"] = 666
@@ -42,4 +42,3 @@ func TestArgumentsCopy(t *testing.T) {
 	t.Logf("a: %v\n", a)
 	t.Logf("b: %v\n", b)
 }
-

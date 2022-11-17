@@ -14,7 +14,7 @@ func (s DefaultServant) Xic(cur Current, in Arguments, out *Arguments) error {
 }
 
 func getServantInfo(name string, servant Servant) (*ServantInfo, error) {
-	svc := &ServantInfo{Service:name, Servant:servant}
+	svc := &ServantInfo{Service: name, Servant: servant}
 	mt, err := getMethodTable(servant)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 		} else {
 			mi.outType = m.Type.In(3)
 			if mi.outType.Kind() != reflect.Ptr {
-				return nil, fmt.Errorf("The 3rd argument must be a pointer to struct or to map[string]interface{}")
+				return nil, fmt.Errorf("The 3rd argument must be a pointer to struct or to map[string]any")
 			}
 
 			out := mi.outType.Elem()
@@ -96,4 +96,3 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 	}
 	return mt, nil
 }
-
