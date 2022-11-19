@@ -43,6 +43,9 @@ type Engine interface {
 
 	StringToProxy(proxy string) (Proxy, error)
 
+	MaxQ() int32
+	SetMaxQ(max int32)
+
 	Shutdown()
 	WaitForShutdown()
 }
@@ -82,8 +85,8 @@ type Current interface {
 	Service() string
 	Method() string
 	Ctx() Context
-	Args() Arguments
 	Con() Connection
+//	Args() Arguments
 }
 
 type Servant interface {
@@ -141,7 +144,7 @@ type Connection interface {
 	SetAdapter(adapter Adapter)
 
 	Incoming() bool
-	Timeout() int
+	Timeout() uint32
 	Endpoint() string
 }
 

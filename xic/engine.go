@@ -4,13 +4,20 @@ import (
 	"fmt"
 	"sync"
 	"os"
+	"math"
+	"sync/atomic"
 )
+
+const DEFAULT_MAX_QUEST_NUMBER = 10000
 
 type _Engine struct {
 	mutex sync.Mutex
 	setting Setting
 	name string
 	id string
+
+	maxQ int32
+	numQ atomic.Int32
 
 	shadowBox *ShadowBox
 	secretBox *SecretBox
@@ -37,6 +44,7 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 		setting: setting,
 		name: name,
 		id: id,
+		maxQ: DEFAULT_MAX_QUEST_NUMBER,
 		shutdownChan: make(chan os.Signal, 1),
 	}
 	engine.adapterMap = make(map[string]*_Adapter)
@@ -55,6 +63,18 @@ func (engine *_Engine) Name() string {
 
 func (engine *_Engine) Id() string {
 	return engine.id
+}
+
+func (engine *_Engine) MaxQ() int32 {
+	return engine.maxQ
+}
+
+func (engine *_Engine) SetMaxQ(max int32) {
+	if max <= 0 {
+		engine.maxQ = math.MaxInt32
+	} else {
+		engine.maxQ = max
+	}
 }
 
 func (engine *_Engine) CreateAdapter(name string) (Adapter, error) {
@@ -146,10 +166,10 @@ func (engine *_Engine) WaitForShutdown() {
 	engine.outConMap = nil
 
 	for _, c := range inConList {
-		c.grace()
+		c.closeGracefully()
 	}
 	for _, c := range outConMap {
-		c.grace()
+		c.closeGracefully()
 	}
 }
 

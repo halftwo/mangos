@@ -7,11 +7,16 @@ import (
 )
 
 const (
-	ProtocolException         = "ProtocolException"
-	ConnectionClosedException = "ConnectionClosedException"
-	ServiceNotFoundException  = "ServiceNotFoundException"
-	MethodNotFoundException   = "MethodNotFoundException"
-	AdapterAbsentException    = "AdapterAbsentException"
+	ProtocolException               = "ProtocolException"
+	ConnectionClosedException       = "ConnectionClosedException"
+)
+
+const (
+	ServiceNotFoundException        = "ServiceNotFoundException"
+	MethodNotFoundException         = "MethodNotFoundException"
+	AdapterAbsentException          = "AdapterAbsentException"
+	ConnectionOverloadException     = "ConnectionOverloadException"
+	EngineOverloadException         = "EngineOverloadException"
 	// TODO
 )
 

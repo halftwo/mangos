@@ -11,6 +11,16 @@ func NewContext() Context {
 	return Context{}
 }
 
+func (ctx Context) Extend(c2 Context) (num int) {
+	for k, v := range c2 {
+		if !ctx.Has(k) {
+			ctx[k] = v
+			num++
+		}
+	}
+	return
+}
+
 func (ctx Context) Has(name string) bool {
 	_, ok := ctx[name]
 	return ok

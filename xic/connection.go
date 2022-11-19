@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"time"
 	"sync"
 	"sync/atomic"
 
@@ -20,48 +21,25 @@ import (
 
 type _Current struct {
 	_InQuest
-	con  *_Connection
-	args Arguments
+	con *_Connection
 }
 
 func newCurrent(con *_Connection, q *_InQuest) *_Current {
 	return &_Current{_InQuest: *q, con: con}
 }
 
-func (cur *_Current) Txid() int64 {
-	return cur.txid
-}
-
-func (cur *_Current) Service() string {
-	return cur.service
-}
-
-func (cur *_Current) Method() string {
-	return cur.method
-}
-
-func (cur *_Current) Ctx() Context {
-	return cur.ctx
-}
-
-func (cur *_Current) Args() Arguments {
-	if cur.args == nil {
-		cur.args = NewArguments()
-		cur.DecodeArgs(cur.args)
-	}
-	return cur.args
-}
-
-func (cur *_Current) Con() Connection {
-	return cur.con
-}
+func (cur *_Current) Txid() int64	{ return cur.txid }
+func (cur *_Current) Service() string	{ return cur.service }
+func (cur *_Current) Method() string	{ return cur.method }
+func (cur *_Current) Ctx() Context	{ return cur.ctx }
+func (cur *_Current) Con() Connection	{ return cur.con }
 
 const (
-	con_INIT          int32 = iota
-	con_WAITING_HELLO           // client waiting for server hello message
+	con_INIT	int32 = iota
+	con_CONNECT
+	con_HANDSHAKE
 	con_ACTIVE
-	con_CLOSE   // Close is called
-	con_CLOSING // graceful closing is in process
+	con_CLOSING		// graceful closing is in process
 	con_CLOSED
 	con_ERROR
 )
@@ -74,26 +52,67 @@ type _Connection struct {
 	adapter         atomic.Value // Adapter
 	serviceHint     string
 	cipher          *_Cipher
-	timeout         int
-	concurrent      int
+	timeout         uint32
+	closeTimeout	uint32
+	connectTimeout	uint32
+	maxQ		int32
+	numQ		atomic.Int32
 	endpoint        *EndpointInfo
 	lastTxid        int64
 	pending         map[int64]*_Result
-	mq              *list.List
+	mq              OutMsgQueue
 	mutex           sync.Mutex
+	cond		sync.Cond
 	err             error
+}
+
+type OutMsgQueue struct {
+	lst *list.List
+	num int
+}
+
+func (q *OutMsgQueue) Num() int {
+	return q.num
+}
+
+func (q *OutMsgQueue) PushBack(msg _OutMessage) {
+	q.lst.PushBack(msg)
+	q.num++
+}
+
+func (q *OutMsgQueue) PopFront() _OutMessage {
+	e := q.lst.Front()
+	if e == nil {
+		return nil
+	}
+	q.lst.Remove(e)
+	q.num--
+	return e.Value.(_OutMessage)
 }
 
 func _newConnection(engine *_Engine, incoming bool) *_Connection {
 	con := &_Connection{engine: engine, incoming: incoming}
+	con.mq = OutMsgQueue{lst:list.New()}
+	con.cond.L = &con.mutex
 	con.pending = make(map[int64]*_Result)
-	con.mq = list.New()
 	return con
 }
 
 func newOutgoingConnection(engine *_Engine, serviceHint string, ei *EndpointInfo) *_Connection {
 	con := _newConnection(engine, false)
 	con.endpoint = ei
+	if ei != nil {
+		con.timeout = ei.timeout
+		con.closeTimeout = ei.closeTimeout
+		con.connectTimeout = ei.connectTimeout
+
+		if con.closeTimeout == 0 {
+			con.closeTimeout = ei.timeout
+		}
+		if con.connectTimeout == 0 {
+			con.connectTimeout = ei.timeout
+		}
+	}
 	go con.client_run()
 	return con
 }
@@ -121,32 +140,38 @@ func (con *_Connection) String() string {
 	return fmt.Sprintf("%s/%s/%s", laddr.Network(), laddr.String(), raddr.String())
 }
 
-func (con *_Connection) IsLive() bool {
-        return con.state.Load() < con_CLOSE
-}
-
-func (con *_Connection) Incoming() bool {
-	return con.incoming
-}
-
-func (con *_Connection) Timeout() int {
-	return con.timeout
-}
-
-func (con *_Connection) Endpoint() string {
-	return con.endpoint.String()
-}
+func (con *_Connection) IsLive() bool { return con.state.Load() <= con_ACTIVE }
+func (con *_Connection) Incoming() bool { return con.incoming }
+func (con *_Connection) Timeout() uint32 { return con.timeout }
+func (con *_Connection) Endpoint() string { return con.endpoint.String() }
 
 func (con *_Connection) Close(force bool) {
-	// TODO
 	if force {
-		con.shut()
+		con.closeForcefully()
+	} else {
+		con.closeGracefully()
 	}
+}
 
+func (con *_Connection) closeGracefully() {
+	con.mutex.Lock()
+	con.state.Store(con_CLOSING)
+	con.cond.Broadcast()
+	con.mutex.Unlock()
+}
+
+func (con *_Connection) closeForcefully() {
+	con.c.Close()
+
+	con.mutex.Lock()
 	pending := con.pending
 	con.pending = nil
+	con.state.Store(con_CLOSED)
+	con.cond.Broadcast()
+	con.mutex.Unlock()
+
+	ex := NewException(ConnectionClosedException, "")
 	for _, res := range pending {
-		ex := NewException(ConnectionClosedException, "")
 		res.err = ex
 		res.broadcast()
 	}
@@ -156,9 +181,11 @@ func (con *_Connection) CreateProxy(service string) (Proxy, error) {
 	if strings.IndexByte(service, '@') >= 0 {
 		return nil, errors.New("Service name can't contain '@'")
 	}
+	con.mutex.Lock()
 	if con.pending == nil {
 		con.pending = make(map[int64]*_Result)
 	}
+	con.mutex.Unlock()
 	prx, err := con.engine.makeFixedProxy(service, con)
 	return prx, err
 }
@@ -172,9 +199,7 @@ func (con *_Connection) Adapter() Adapter {
 }
 
 func (con *_Connection) SetAdapter(adapter Adapter) {
-	con.mutex.Lock()
 	con.adapter.Store(adapter)
-	con.mutex.Unlock()
 }
 
 func (con *_Connection) _generate_txid() int64 {
@@ -185,7 +210,12 @@ func (con *_Connection) _generate_txid() int64 {
 	return con.lastTxid
 }
 
-func (con *_Connection) invoke(prx *_Proxy, q *_OutQuest, res *_Result) error {
+func (con *_Connection) invoke(prx *_Proxy, q *_OutQuest, res *_Result) {
+	if con.state.Load() > con_ACTIVE {
+		res.err = errors.New("Connection closing or closed")
+		return
+	}
+
 	if res != nil && res.txid != 0 {
 		con.mutex.Lock()
 		txid := con._generate_txid()
@@ -195,17 +225,6 @@ func (con *_Connection) invoke(prx *_Proxy, q *_OutQuest, res *_Result) error {
 		con.mutex.Unlock()
 	}
 	con.sendMessage(q)
-	return nil
-}
-
-func (con *_Connection) shut() {
-	con.c.Close()
-	// TODO
-}
-
-func (con *_Connection) grace() {
-	// TODO
-	con.send_msg(theByeMessage)
 }
 
 func makePointerValue(t reflect.Type) reflect.Value {
@@ -325,12 +344,11 @@ func (con *_Connection) server_handshake() {
 		s4.M2 = srp6svr.ComputeM2()
 		s4.Cipher = "AES128-EAX" // TEST
 		s4.Mode = 1
-		con.send_msg(theHelloMessage)
-		if err != nil {
-			// TODO
-		}
 	}
-	con.state.Store(con_ACTIVE)
+
+	if con.err == nil {
+		con.send_msg(theHelloMessage)
+	}
 }
 
 func (con *_Connection) client_handshake() {
@@ -396,42 +414,81 @@ func (con *_Connection) client_handshake() {
 		msg = con.read_msg()
 	}
 
-	if msg != nil && msg.Type() != 'H' {
+	if msg != nil && msg.Type() != HelloMsgType {
 		con.err = errors.New("Unexpected message received, expect Hello message")
 		return
 	}
-
-	con.state.Store(con_ACTIVE)
 }
 
 func (con *_Connection) server_run() {
+	con.state.Store(con_HANDSHAKE)
 	con.server_handshake()
+
 	if con.err != nil {
 		var forbidden _ForbiddenArgs
 		forbidden.Reason = con.err.Error()
 		con.check_send(ck_FORBIDDEN, &forbidden)
-		// TODO
+		con.state.Store(con_ERROR)
+		con.c.Close()
 		return
 	}
+
+	con.state.Store(con_ACTIVE)
 	con.process_loop()
+}
+
+func timeout2duration(timeout uint32) time.Duration {
+	return time.Millisecond * time.Duration(timeout)
+}
+
+func timeout2deadline(timeout uint32) time.Time {
+	if timeout > 0 {
+		return time.Now().Add(time.Millisecond * time.Duration(timeout))
+	}
+	return time.Time{}
 }
 
 func (con *_Connection) client_run() {
 	var err error
+
+	con.state.Store(con_CONNECT)
 	ei := con.endpoint
-	con.c, err = net.Dial(ei.proto, ei.Address())
+	con.c, err = net.DialTimeout(ei.proto, ei.Address(), timeout2duration(con.connectTimeout))
 	if err != nil {
 		con.state.Store(con_ERROR)
-		// TODO
+		con.c.Close()
 		return
 	}
 
+	con.state.Store(con_HANDSHAKE)
 	con.client_handshake()
+
 	if con.err != nil {
-		// TODO
+		con.state.Store(con_ERROR)
+		con.c.Close()
 		return
 	}
+
+	con.state.Store(con_ACTIVE)
 	con.process_loop()
+}
+
+func err2OutAnswer(quest *_InQuest, err error) *_OutAnswer {
+	outErr := NewArguments()
+	outErr.Set("raiser", fmt.Sprintf("%s*%s @", quest.method, quest.service))
+	ex, ok := err.(Exception)
+	if ok {
+		outErr.Set("exname", ex.Exname())
+		outErr.Set("code", ex.Code())
+		outErr.Set("tag", ex.Tag())
+		outErr.Set("message", ex.Message())
+		detail := map[string]any{"file": ex.File(), "line": ex.Line()}
+		outErr.Set("detail", detail)
+	} else {
+		outErr.Set("message", err.Error())
+	}
+	answer := newOutAnswerExceptional(quest.txid, outErr)
+	return answer
 }
 
 func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
@@ -471,57 +528,52 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 				if !rts[0].IsNil() {
 					err = rts[0].Interface().(error)
 				} else {
-					answer = newOutAnswerNormal(out.Interface())
+					answer = newOutAnswerNormal(quest.txid, out.Interface())
 				}
 			}
 		} else {
-			outArgs := NewArguments()
-			err = si.Servant.Xic(cur, cur.Args(), &outArgs)
+			var inArgs Arguments
+			var outArgs Arguments
+			err = cur.DecodeArgs(&inArgs)
 			if err == nil {
-				answer = newOutAnswerNormal(outArgs)
+				err = si.Servant.Xic(cur, inArgs, &outArgs)
+			}
+			if err == nil {
+				answer = newOutAnswerNormal(quest.txid, outArgs)
 			}
 		}
 	}
 
-	ZZZ(err)
 	if quest.txid != 0 {
 		if oneway && err == nil {
 			err = fmt.Errorf("Oneway method invoked as twoway")
 		}
 
 		if err != nil {
-			outErr := NewArguments()
-			outErr.Set("raiser", fmt.Sprintf("%s*%s @", cur.Method(), cur.Service()))
-			ex, ok := err.(Exception)
-			if ok {
-				outErr.Set("exname", ex.Exname())
-				outErr.Set("code", ex.Code())
-				outErr.Set("tag", ex.Tag())
-				outErr.Set("message", ex.Message())
-				detail := map[string]any{"file": ex.File(), "line": ex.Line()}
-				outErr.Set("detail", detail)
-			} else {
-				outErr.Set("message", err.Error())
-			}
-			answer = newOutAnswerExceptional(outErr)
+			answer = err2OutAnswer(quest, err)
 		} else if answer == nil {
 			panic("Can't reach here")
 		}
 
-		answer.SetTxid(quest.txid)
 		con.sendMessage(answer)
 	} else if err != nil {
-		// TODO: log the error
+		dlog.Log("XIC.WARN", "%s", err.Error())
 	}
+	con.engine.numQ.Add(-1)
 }
 
 func (con *_Connection) handleAnswer(answer *_InAnswer) {
+	con.mutex.Lock()
 	res, ok := con.pending[answer.txid]
+	if ok {
+		delete(con.pending, answer.txid)
+	}
+	con.mutex.Unlock()
+
 	if !ok {
-		dlog.Log("WARNING", "Unknown answer with txid=%d", answer.txid)
+		dlog.Log("XIC.WARN", "Unknown answer with txid=%d", answer.txid)
 		return
 	}
-	delete(con.pending, answer.txid)
 
 	if answer.status != 0 {
 		args := NewArguments()
@@ -544,14 +596,14 @@ func checkHeader(header _MessageHeader) error {
 		return fmt.Errorf("Unknown message Magic(%d) and Version(%d)", header.Magic, header.Version)
 	}
 
-	switch header.Type {
-	case 'Q', 'A', 'C':
+	switch MsgType(header.Type) {
+	case QuestMsgType, AnswerMsgType, CheckMsgType:
 		if (header.Flags &^ 0x01) != 0 {
 			return errors.New("Unknown message Flags")
 		} else if int(header.BodySize) > MaxMessageSize {
 			return errors.New("Message size too large")
 		}
-	case 'H', 'B':
+	case HelloMsgType, ByeMsgType:
 		if header.Flags != 0 || header.BodySize != 0 {
 			return fmt.Errorf("Invalid Hello or Bye message")
 		}
@@ -569,7 +621,11 @@ func ZZZ(x ...any) {
 
 func (con *_Connection) read_msg() _Message {
 	var header _MessageHeader
+	if con.timeout != 0 {
+		con.c.SetReadDeadline(timeout2deadline(con.timeout))
+	}
 	if con.err = binary.Read(con.c, binary.BigEndian, &header); con.err != nil {
+		// TODO: con.err == io.EOF
 		return nil
 	}
 
@@ -594,26 +650,86 @@ func (con *_Connection) read_msg() _Message {
 
 func (con *_Connection) send_msg(msg _OutMessage) error {
 	buf := msg.Bytes()
+	if con.timeout != 0 {
+		con.c.SetWriteDeadline(timeout2deadline(con.timeout))
+	}
 	_, err := con.c.Write(buf)
 	return err
 }
 
-func (con *_Connection) sendMessage(msg _OutMessage) error {
-	// TODO
+func (con *_Connection) sendMessage(msg _OutMessage) {
+	// msg.Type() == AnswerMsgType || msg.Type() == QuestMsgType
+	con.mutex.Lock()
 	con.mq.PushBack(msg)
-	// TODO: notify send_loop
-	return nil
+	con.cond.Broadcast()
+	con.mutex.Unlock()
 }
 
 func (con *_Connection) send_loop() {
 	for {
-		//var e *list.Element
-		for e := con.mq.Front(); e != nil; e = con.mq.Front() {
-			m := con.mq.Remove(e)
-			con.send_msg(m.(_OutMessage))
+		for {
+			con.mutex.Lock()
+			msg := con.mq.PopFront()
+			con.mutex.Unlock()
+
+			if msg == nil {
+				break
+			}
+
+			doit := false
+			switch msg.Type() {
+			case QuestMsgType:
+				if con.state.Load() == con_ACTIVE {
+					doit = true
+				}
+			case AnswerMsgType:
+				doit = true
+				con.numQ.Add(-1)
+			default:
+				panic("Can't reach here")
+			}
+
+			if doit {
+				if err := con.send_msg(msg); err != nil {
+					con.err = err
+					break
+				}
+			}
 		}
-		// TODO: wait for new msg in the mq
+
+		con.mutex.Lock()
+		goodbye := (con.state.Load() == con_CLOSING && con.numQ.Load() == 0 && len(con.pending) == 0)
+		con.mutex.Unlock()
+		if (goodbye) {
+			con.send_msg(theByeMessage)
+			return
+		}
+
+		con.mutex.Lock()
+		for con.mq.Num() == 0 && con.state.Load() == con_ACTIVE {
+			con.cond.Wait()
+		}
+		con.mutex.Unlock()
 	}
+}
+
+func (con *_Connection) check_overload(quest *_InQuest) bool {
+	if con.maxQ > 0 && con.numQ.Load() >= con.maxQ {
+		answer := err2OutAnswer(quest, NewException(ConnectionOverloadException, ""))
+		con.sendMessage(answer)
+		return true
+	}
+
+	engine := con.engine
+	if engine.numQ.Load() >= engine.maxQ {
+		answer := err2OutAnswer(quest, NewException(ConnectionOverloadException, ""))
+		con.sendMessage(answer)
+		return true
+	}
+
+	engine.numQ.Add(1)
+	con.numQ.Add(1)
+	return false
 }
 
 func (con *_Connection) process_loop() {
@@ -626,37 +742,66 @@ func (con *_Connection) process_loop() {
 		}
 
 		switch msg.Type() {
-		case 'Q':
-			adp := con.adapter.Load()
-			adapter := adp.(Adapter)
-			quest := msg.(*_InQuest)
-			if con.concurrent > 1 {
+		case QuestMsgType:
+			state := con.state.Load()
+			if state == con_ACTIVE {
+				quest := msg.(*_InQuest)
+				if con.check_overload(quest) {
+					break
+				}
+
+				adp := con.adapter.Load()
+				adapter := adp.(Adapter)
 				go con.handleQuest(adapter, quest)
+			} else if state == con_CLOSING {
+				// do nothing
+				// the Quest is discarded
 			} else {
-				con.handleQuest(adapter, quest)
+				con.err = errors.New("Unexpected Quest message received")
 			}
 			// TODO
 
-		case 'A':
+		case AnswerMsgType:
 			answer := msg.(*_InAnswer)
 			con.handleAnswer(answer)
 
-		case 'B':
-			// TODO
-			break
+		case ByeMsgType:
+			ZZZ(msg)
+			// TODO: some checks?
+			goto done
 
-		case 'C':
+		case CheckMsgType:
 			con.err = errors.New("Unexpected Check message received")
-			break
-		case 'H':
+		case HelloMsgType:
 			con.err = errors.New("Unexpected Hello message received")
+		}
+
+		if con.err != nil {
 			break
 		}
 	}
-
-	if con.err != nil {
-		con.shut()
+done:
+	con.c.Close()
+	con.mutex.Lock()
+	pending := con.pending
+	con.pending = nil
+	if con.err == nil {
+		con.err = ByeMessageException
+		con.state.Store(con_CLOSED)
 	} else {
-		con.grace()
+		con.state.Store(con_ERROR)
+	}
+	err := con.err
+	con.cond.Broadcast()
+	con.mutex.Unlock()
+
+	// TODO: if ByeMessage received, the pending quests are not processed 
+	// by the server and can be safely retried.
+	for _, res := range pending {
+		res.err = err
+		res.broadcast()
 	}
 }
+
+var ByeMessageException = errors.New("ByeMessageException")
+

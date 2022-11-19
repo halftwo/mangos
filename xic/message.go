@@ -11,11 +11,11 @@ import (
 type MsgType byte
 
 const (
-	CheckMessage  MsgType = 'C'
-	HelloMessage          = 'H'
-	ByeMessage            = 'B'
-	QuestMessage          = 'Q'
-	AnswerMessage         = 'A'
+	CheckMsgType  MsgType = 'C'
+	HelloMsgType          = 'H'
+	ByeMsgType            = 'B'
+	QuestMsgType          = 'Q'
+	AnswerMsgType         = 'A'
 )
 
 const headerSize = 8
@@ -184,15 +184,19 @@ type _OutAnswer struct {
 
 var _ _OutMessage = (*_OutAnswer)(nil)
 
-func newOutAnswer(status int, args any) *_OutAnswer {
-	a := &_OutAnswer{txid: -1, start: -1}
+func newOutAnswer(normal bool, txid int64, args any) *_OutAnswer {
+	a := &_OutAnswer{txid:txid, start: -1}
 	b := &bytes.Buffer{}
 	enc := vbs.NewEncoder(b)
 	b.Write(commonHeaderBytes[:])
 	enc.Encode(math.MaxInt64)
 	a.reserved = b.Len()
 
-	enc.Encode(status)
+        if normal {
+                enc.Encode(0)
+        } else {
+                enc.Encode(-1)
+        }
 	err := enc.Encode(args)
 	if err != nil {
 		panic("vbs.Encoder error")
@@ -201,12 +205,12 @@ func newOutAnswer(status int, args any) *_OutAnswer {
 	return a
 }
 
-func newOutAnswerNormal(args any) *_OutAnswer {
-	return newOutAnswer(0, args)
+func newOutAnswerNormal(txid int64, args any) *_OutAnswer {
+	return newOutAnswer(true, txid, args)
 }
 
-func newOutAnswerExceptional(args any) *_OutAnswer {
-	return newOutAnswer(-1, args)
+func newOutAnswerExceptional(txid int64, args any) *_OutAnswer {
+	return newOutAnswer(false, txid, args)
 }
 
 func (a *_OutAnswer) Type() MsgType {
@@ -253,8 +257,8 @@ func (m *_InMsg) DecodeArgs(args any) error {
 }
 
 type _InCheck struct {
-	cmd string
 	_InMsg
+	cmd string
 }
 
 func newInCheck(buf []byte) *_InCheck {
@@ -271,11 +275,11 @@ func (q *_InCheck) Type() MsgType {
 }
 
 type _InQuest struct {
+	_InMsg
 	txid    int64
 	service string
 	method  string
 	ctx     Context
-	_InMsg
 }
 
 func newInQuest(buf []byte) *_InQuest {

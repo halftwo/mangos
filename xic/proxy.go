@@ -195,15 +195,21 @@ func (prx *_Proxy) Invoke(method string, in, out any) error {
 }
 
 func (prx *_Proxy) InvokeCtx(ctx Context, method string, in, out any) error {
-	result := prx.InvokeCtxAsync(ctx, method, in, out)
-	return result.Err()
+	res := prx.InvokeCtxAsync(ctx, method, in, out)
+	res.Wait()
+	return res.Err()
 }
 
 func (prx *_Proxy) InvokeOneway(method string, in any) error {
-	return prx.InvokeCtxOneway(prx.Context(), method, in)
+	return prx.InvokeCtxOneway(nil, method, in)
 }
 
 func (prx *_Proxy) InvokeCtxOneway(ctx Context, method string, in any) error {
+	if ctx != nil {
+		ctx.Extend(prx.Context())
+	} else {
+		ctx = prx.Context()
+	}
 	q := newOutQuest(0, prx.service, method, ctx, in)
 	con, err := prx.pickConnection(q)
 	if err != nil {
@@ -215,19 +221,29 @@ func (prx *_Proxy) InvokeCtxOneway(ctx Context, method string, in any) error {
 }
 
 func (prx *_Proxy) InvokeAsync(method string, in, out any) Result {
-	return prx.InvokeCtxAsync(prx.Context(), method, in, out)
+	return prx.InvokeCtxAsync(nil, method, in, out)
 }
 
 func (prx *_Proxy) InvokeCtxAsync(ctx Context, method string, in, out any) Result {
 	res := &_Result{txid: -1, service: prx.service, method: method, in: in, out: out}
 	res.cond.L = &res.mtx
+
+	if ctx != nil {
+		ctx.Extend(prx.Context())
+	} else {
+		ctx = prx.Context()
+	}
 	q := newOutQuest(-1, prx.service, method, ctx, in)
 	con, err := prx.pickConnection(q)
 	if err != nil {
 		res.err = err
-		res.broadcast()
 	} else {
 		con.invoke(prx, q, res)
 	}
+
+	if res.err != nil {
+		res.broadcast()
+	}
 	return res
 }
+

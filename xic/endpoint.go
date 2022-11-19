@@ -14,9 +14,19 @@ type EndpointInfo struct {
 	proto string
 	host string
 	port uint16
-	timeout int
-	closeTimeout int
-	connectTimeout int
+	timeout uint32
+	closeTimeout uint32
+	connectTimeout uint32
+}
+
+func str2timeout(s string) uint32 {
+	n, _ := strconv.Atoi(s)
+	if n > math.MaxUint32 {
+		return math.MaxUint32
+	} else if n < 0 {
+		return 0
+	}
+	return uint32(n)
 }
 
 // this endpoint has no '@' prefix
@@ -56,17 +66,9 @@ func parseEndpoint(endpoint string) (*EndpointInfo, error) {
 
 		if key == "timeout" {
 			sp := xstr.NewSplitter(value, ",")
-			ei.timeout, _ = strconv.Atoi(sp.Next())
-
-			ei.closeTimeout, _ = strconv.Atoi(sp.Next())
-			if ei.closeTimeout < 0 {
-				ei.closeTimeout = 0
-			}
-
-			ei.connectTimeout, _ = strconv.Atoi(sp.Next())
-			if ei.connectTimeout < 0 {
-				ei.connectTimeout = 0
-			}
+			ei.timeout = str2timeout(sp.Next())
+			ei.closeTimeout = str2timeout(sp.Next())
+			ei.connectTimeout = str2timeout(sp.Next())
 		}
 	}
 	// TODO
