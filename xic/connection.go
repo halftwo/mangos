@@ -706,10 +706,14 @@ func (con *_Connection) send_loop() {
 		}
 
 		con.mutex.Lock()
-		goodbye := (con.state.Load() == con_CLOSING && con.numQ.Load() == 0 && len(con.pending) == 0)
+		state := con.state.Load()
+		silent := (con.numQ.Load() == 0 && len(con.pending) == 0)
 		con.mutex.Unlock()
-		if (goodbye) {
-			con.send_msg(theByeMessage)
+
+		if (state > con_ACTIVE) {
+			if (state == con_CLOSING && silent) {
+				con.send_msg(theByeMessage)
+			}
 			return
 		}
 
@@ -774,7 +778,7 @@ func (con *_Connection) process_loop() {
 			con.handleAnswer(answer)
 
 		case ByeMsgType:
-			ZZZ(msg)
+			ZZZ("Bye")
 			// TODO: some checks?
 			goto done
 
