@@ -161,19 +161,28 @@ func (con *_Connection) closeGracefully() {
 }
 
 func (con *_Connection) closeForcefully() {
+	con.err = NewException(ConnectionClosedException, "")
+	con.close_and_reply(false)
+}
+
+func (con *_Connection) close_and_reply(retryable bool) {
 	con.c.Close()
 
 	con.mutex.Lock()
 	pending := con.pending
 	con.pending = nil
+	err := con.err
 	con.state.Store(con_CLOSED)
 	con.cond.Broadcast()
 	con.mutex.Unlock()
 
-	ex := NewException(ConnectionClosedException, "")
-	for _, res := range pending {
-		res.err = ex
-		res.broadcast()
+	if (retryable) {
+		// TODO
+	} else {
+		for _, res := range pending {
+			res.err = err
+			res.broadcast()
+		}
 	}
 }
 
@@ -428,8 +437,7 @@ func (con *_Connection) server_run() {
 		var forbidden _ForbiddenArgs
 		forbidden.Reason = con.err.Error()
 		con.check_send(ck_FORBIDDEN, &forbidden)
-		con.state.Store(con_ERROR)
-		con.c.Close()
+		con.close_and_reply(true)
 		return
 	}
 
@@ -456,7 +464,7 @@ func (con *_Connection) client_run() {
 	con.c, err = net.DialTimeout(ei.proto, ei.Address(), timeout2duration(con.connectTimeout))
 	if err != nil {
 		con.state.Store(con_ERROR)
-		con.c.Close()
+		con.close_and_reply(true)
 		return
 	}
 
@@ -465,7 +473,7 @@ func (con *_Connection) client_run() {
 
 	if con.err != nil {
 		con.state.Store(con_ERROR)
-		con.c.Close()
+		con.close_and_reply(true)
 		return
 	}
 
@@ -781,26 +789,8 @@ func (con *_Connection) process_loop() {
 		}
 	}
 done:
-	con.c.Close()
-	con.mutex.Lock()
-	pending := con.pending
-	con.pending = nil
-	if con.err == nil {
-		con.err = ByeMessageException
-		con.state.Store(con_CLOSED)
-	} else {
-		con.state.Store(con_ERROR)
-	}
-	err := con.err
-	con.cond.Broadcast()
-	con.mutex.Unlock()
-
-	// TODO: if ByeMessage received, the pending quests are not processed 
-	// by the server and can be safely retried.
-	for _, res := range pending {
-		res.err = err
-		res.broadcast()
-	}
+	con.err = ByeMessageException
+	con.close_and_reply(true)
 }
 
 var ByeMessageException = errors.New("ByeMessageException")
