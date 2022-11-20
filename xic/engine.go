@@ -6,6 +6,8 @@ import (
 	"os"
 	"math"
 	"sync/atomic"
+
+	"halftwo/mangos/dlog"
 )
 
 const DEFAULT_MAX_QUEST_NUMBER = 10000
@@ -19,6 +21,7 @@ type _Engine struct {
 	maxQ int32
 	numQ atomic.Int32
 
+	cipher _CipherSuite
 	shadowBox *ShadowBox
 	secretBox *SecretBox
 
@@ -47,9 +50,31 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 		maxQ: DEFAULT_MAX_QUEST_NUMBER,
 		shutdownChan: make(chan os.Signal, 1),
 	}
+	var err error
 	engine.adapterMap = make(map[string]*_Adapter)
 	engine.proxyMap = make(map[string]*_Proxy)
 	engine.outConMap = make(map[string]*_Connection)
+
+	shadow := setting.Pathname("xic.passport.shadow")
+	if shadow != "" {
+		engine.shadowBox, err = NewShadowBoxFromFile(shadow)
+		if err != nil {
+			dlog.Log("XIC.WARN", "Failed to open shadow file %s", shadow)
+		}
+	}
+
+	engine.cipher = String2CipherSuite(setting.Get("xic.cipher"))
+	if engine.cipher == CIPHER_UNKNOWN {
+		engine.cipher = AES128_EAX
+	}
+
+	secret := setting.Pathname("xic.passport.secret")
+	if secret != "" {
+		engine.secretBox, err = NewSecretBoxFromFile(secret)
+		if err != nil {
+			dlog.Log("XIC.WARN", "Failed to open secret file %s", secret)
+		}
+	}
 	return engine
 }
 
@@ -75,6 +100,14 @@ func (engine *_Engine) SetMaxQ(max int32) {
 	} else {
 		engine.maxQ = max
 	}
+}
+
+func (engine *_Engine) SetSecretBox(sb *SecretBox) {
+	engine.secretBox = sb
+}
+
+func (engine *_Engine) SetShadowBox(sb *ShadowBox) {
+	engine.shadowBox = sb
 }
 
 func (engine *_Engine) CreateAdapter(name string) (Adapter, error) {

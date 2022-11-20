@@ -7,6 +7,12 @@ import (
 )
 
 func run(engine xic.Engine, args []string) error {
+	secretBox, err := xic.NewSecretBox("@++=hello:world")
+	if err != nil {
+		return err
+	}
+	engine.SetSecretBox(secretBox)
+
 	prx, err := engine.StringToProxy("Demo@tcp++5555")
 	if err != nil {
 		return err

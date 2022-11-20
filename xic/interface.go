@@ -46,6 +46,9 @@ type Engine interface {
 	MaxQ() int32
 	SetMaxQ(max int32)
 
+	SetSecretBox(secret *SecretBox)
+	SetShadowBox(secret *ShadowBox)
+
 	Shutdown()
 	WaitForShutdown()
 }
@@ -86,7 +89,6 @@ type Current interface {
 	Method() string
 	Ctx() Context
 	Con() Connection
-//	Args() Arguments
 }
 
 type Servant interface {

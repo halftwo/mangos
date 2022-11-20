@@ -3,7 +3,6 @@ package xic
 import (
 	"bytes"
 	"container/list"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -295,14 +294,19 @@ func (con *_Connection) check_send(cmd string, args any) bool {
 	return con.err == nil
 }
 
-func (con *_Connection) check_expect(cmd string, args any) bool {
-	msg := con.must_read_msg()
+func expect_check_msg(msg _Message, cmd string, args any) error {
 	check, ok := msg.(*_InCheck)
 	if !ok || check.cmd != cmd {
-		// TODO
-		return false
+		return NewExceptionf(ProtocolException, "Unexpected cmd of CheckMessage %s", check.cmd)
 	}
-	check.DecodeArgs(args)
+	return check.DecodeArgs(args)
+}
+
+func (con *_Connection) check_expect(cmd string, args any) bool {
+	msg := con.must_read_msg()
+	if msg != nil {
+		con.err = expect_check_msg(msg, cmd, args)
+	}
 	return con.err == nil
 }
 
@@ -317,7 +321,6 @@ const (
 
 func (con *_Connection) server_handshake() {
 	if con.engine.shadowBox != nil {
-		// TODO
 		var auth _AuthArgs
 		auth.Method = "SRP6a"
 		if !con.check_send(ck_AUTHENTICATE, &auth) {
@@ -354,16 +357,27 @@ func (con *_Connection) server_handshake() {
 		var s3 _S3Args
 		con.check_expect(ck_SRP6a3, &s3)
 		srp6svr.SetA(s3.A)
+		srp6svr.ComputeS()
 		M1 := srp6svr.ComputeM1()
 		if !bytes.Equal(M1, s3.M1) {
 			con.err = errors.New("srp6a M1 not equal")
 			return
 		}
 
+		cihper_suite := con.engine.cipher
 		var s4 _S4Args
 		s4.M2 = srp6svr.ComputeM2()
-		s4.Cipher = "AES128-EAX" // TEST
+		s4.Cipher = cihper_suite.String()
 		s4.Mode = 1
+		if !con.check_send(ck_SRP6a4, &s4) {
+			return
+		}
+
+		key := srp6svr.ComputeK()
+		con.cipher, con.err = newXicCipher(cihper_suite, key, true)
+		if con.err != nil {
+			return
+		}
 	}
 
 	if con.err == nil {
@@ -374,9 +388,10 @@ func (con *_Connection) server_handshake() {
 func (con *_Connection) client_handshake() {
 	msg := con.must_read_msg()
 
-	if msg != nil && msg.Type() == 'C' {
+	if msg != nil && msg.Type() == CheckMsgType {
 		var auth _AuthArgs
-		if !con.check_expect(ck_AUTHENTICATE, &auth) {
+		con.err = expect_check_msg(msg, ck_AUTHENTICATE, &auth)
+		if con.err != nil {
 			return
 		}
 
@@ -415,6 +430,7 @@ func (con *_Connection) client_handshake() {
 
 		var s3 _S3Args
 		s3.A = srp6cl.GenerateA()
+		srp6cl.ComputeS()
 		s3.M1 = srp6cl.ComputeM1()
 		if !con.check_send(ck_SRP6a3, &s3) {
 			return
@@ -428,6 +444,13 @@ func (con *_Connection) client_handshake() {
 		M2 := srp6cl.ComputeM2()
 		if !bytes.Equal(M2, s4.M2) {
 			con.err = errors.New("srp6a M2 not equal")
+			return
+		}
+
+		key := srp6cl.ComputeK()
+		suite := String2CipherSuite(s4.Cipher)
+		con.cipher, con.err = newXicCipher(suite, key, false)
+		if con.err != nil {
 			return
 		}
 
@@ -483,6 +506,7 @@ func (con *_Connection) client_run() {
 	con.client_handshake()
 
 	if con.err != nil {
+		ZZZ(con.err)
 		con.state.Store(con_ERROR)
 		con.close_and_reply(true)
 		return
@@ -615,12 +639,14 @@ func checkHeader(header _MessageHeader) error {
 		return fmt.Errorf("Unknown message Magic(%d) and Version(%d)", header.Magic, header.Version)
 	}
 
-	switch MsgType(header.Type) {
+	switch header.Type {
 	case QuestMsgType, AnswerMsgType, CheckMsgType:
-		if (header.Flags &^ 0x01) != 0 {
+		if (header.Flags &^ FLAG_MASK) != 0 {
 			return errors.New("Unknown message Flags")
-		} else if int(header.BodySize) > MaxMessageSize {
-			return errors.New("Message size too large")
+		} else if header.BodySize > MaxMessageSize {
+			if (header.Flags & FLAG_CIPHER) == 0 || header.BodySize - CipherMacSize > MaxMessageSize {
+				return errors.New("Message size too large")
+			}
 		}
 	case HelloMsgType, ByeMsgType:
 		if header.Flags != 0 || header.BodySize != 0 {
@@ -673,45 +699,63 @@ func (con *_Connection) _deadline() time.Time {
 	return con._closeDeadline()
 }
 
-func (con *_Connection) _read_header(header *_MessageHeader, mustget bool) error {
+func (con *_Connection) _read_header(buf []byte, mustget bool) error {
 again:
 	con.c.SetReadDeadline(con._deadline())
-	var buf [HeaderSize]byte
-	n, err := io.ReadFull(con.c, buf[:])
+	n, err := io.ReadFull(con.c, buf)
 	if err != nil {
 		if !mustget && n == 0 && errors.Is(err, os.ErrDeadlineExceeded) {
 			goto again
 		}
-		return err
 	}
-
-	return binary.Read(bytes.NewReader(buf[:]), binary.BigEndian, header)
+	return err
 }
 
 func (con *_Connection) read_msg(must bool) _Message {
-	var header _MessageHeader
-	if err := con._read_header(&header, must); err != nil {
+	var headbuf [MsgHeaderSize]byte
+	if err := con._read_header(headbuf[:], must); err != nil {
 		con.err = err
 		return nil
 	}
 
+	header := buf2header(headbuf[:])
 	if err := checkHeader(header); err != nil {
 		con.err = err
 		dlog.Log("XIC.WARN", "Invalid xic header %v", header)
 		return nil
 	}
 
-	var buf []byte
+	var bodybuf []byte
 	if header.BodySize > 0 {
-		buf = make([]byte, header.BodySize)
-		_, err := io.ReadFull(con.c, buf)
+		bodybuf = make([]byte, header.BodySize)
+		_, err := io.ReadFull(con.c, bodybuf)
 		if err != nil {
 			con.err = err
 			return nil
 		}
 	}
 
-	msg, err := DecodeMessage(header, buf)
+	if (header.Flags & FLAG_CIPHER) != 0 {
+		cipher := con.cipher
+		if cipher == nil {
+			con.err = errors.New("FLAG_CIPHER set but no cipher negotiated")
+			return nil
+		}
+		if header.BodySize <= CipherMacSize {
+			con.err = errors.New("Invalid message BodySize")
+			return nil
+		}
+		header.BodySize -= CipherMacSize
+		cipher.InputStart(headbuf[:])
+		cipher.InputUpdate(bodybuf, bodybuf[:header.BodySize])
+		if !cipher.InputFinish(bodybuf[header.BodySize:]) {
+			con.err = errors.New("Failed to decrypt msg body")
+			return nil
+		}
+		bodybuf = bodybuf[:header.BodySize]
+	}
+
+	msg, err := DecodeMessage(header, bodybuf)
 	con.err = err
 	return msg
 }
@@ -725,9 +769,29 @@ func (con *_Connection) try_read_msg() _Message {
 }
 
 func (con *_Connection) send_msg(msg _OutMessage) error {
+	var mac [CipherMacSize]byte
+	encrypted := false
+	cipher := con.cipher
+
 	buf := msg.Bytes()
+	msgType := msg.Type()
+	if cipher != nil && (msgType == QuestMsgType || msgType == AnswerMsgType) {
+		encrypted = true
+		hdr := buf2header(buf[:MsgHeaderSize])
+		hdr.Flags = FLAG_CIPHER
+		hdr.BodySize += CipherMacSize
+		hdr.FillBuffer(buf[:MsgHeaderSize])
+
+		cipher.OutputStart(buf[:MsgHeaderSize])
+		cipher.OutputUpdate(buf[MsgHeaderSize:], buf[MsgHeaderSize:])
+		cipher.OutputFinish(mac[:])
+	}
+
 	con.c.SetWriteDeadline(con._deadline())
 	_, err := con.c.Write(buf)
+	if encrypted && err == nil {
+		_, err = con.c.Write(mac[:])
+	}
 	return err
 }
 

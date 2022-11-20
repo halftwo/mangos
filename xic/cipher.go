@@ -11,18 +11,19 @@ import (
 
 type _CipherSuite int
 
+const CipherMacSize = 16
+
 const (
-	UNKNOWN_SUITE _CipherSuite  = iota
+	CIPHER_UNKNOWN _CipherSuite  = iota
 	CLEARTEXT
 	AES128_EAX
 	AES192_EAX
 	AES256_EAX
-	MAX_SUITE
 )
 
 func (c _CipherSuite) String() string {
 	switch c {
-	case UNKNOWN_SUITE:
+	case CIPHER_UNKNOWN:
 		return "UNKNOWN"
 	case CLEARTEXT:
 		return "CLEARTEXT"
@@ -36,6 +37,20 @@ func (c _CipherSuite) String() string {
 	return "INVALID"
 }
 
+func String2CipherSuite(s string) _CipherSuite {
+	suite := CIPHER_UNKNOWN
+	switch s {
+	case "CLEARTEXT":
+		suite = CLEARTEXT
+	case "AES128-EAX":
+		suite = AES128_EAX
+	case "AES192-EAX":
+		suite = AES192_EAX
+	case "AES256-EAX":
+		suite = AES256_EAX
+	}
+	return suite
+}
 
 type _Cipher struct {
 	ox *eax.EaxCtx
@@ -106,7 +121,6 @@ func counterAdd2(counter []byte) {
 	}
 }
 
-
 func (c *_Cipher) OutputStart(header []byte) {
 	counterAdd2(c.oNonce[:])
 	c.ox.Start(true, c.oNonce[:], header)
@@ -131,7 +145,7 @@ func (c *_Cipher) InputUpdate(out, in []byte) {
 }
 
 func (c *_Cipher) InputFinish(MAC []byte) bool {
-	var mac [16]byte
+	var mac [CipherMacSize]byte
 	c.ix.Finish(mac[:])
 	return bytes.Equal(MAC, mac[:])
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"encoding/binary"
 
 	"halftwo/mangos/vbs"
 )
@@ -11,21 +12,26 @@ import (
 type MsgType byte
 
 const (
-	CheckMsgType  MsgType = 'C'
-	HelloMsgType          = 'H'
-	ByeMsgType            = 'B'
-	QuestMsgType          = 'Q'
-	AnswerMsgType         = 'A'
+	QuestMsgType MsgType = 'Q'
+	AnswerMsgType        = 'A'
+	CheckMsgType	     = 'C'
+	HelloMsgType         = 'H'
+	ByeMsgType           = 'B'
 )
 
-const HeaderSize = 8
+const MsgHeaderSize = 8
+
+const (
+	FLAG_CIPHER = 0x02
+	FLAG_MASK = FLAG_CIPHER
+)
 
 type _MessageHeader struct {
-	Magic    byte  // 'X'
-	Version  byte  // '!'
-	Type     byte  // 'Q', 'A', 'H', 'B', 'C'
-	Flags    byte  // 0x00 or 0x02
-	BodySize int32 // in big endian byte order
+	Magic    byte		// 'X'
+	Version  byte		// '!'
+	Type     MsgType        // 'Q', 'A', 'H', 'B', 'C'
+	Flags    byte           // 0x00 or 0x02
+	BodySize int32          // in big endian byte order
 }
 
 type _Message interface {
@@ -37,21 +43,30 @@ type _OutMessage interface {
 	Bytes() []byte
 }
 
-/*
-type _InMessage interface {
-	_Message
-	Args() Arguments
+
+func buf2header(buf []byte) (hdr _MessageHeader) {
+	hdr.Magic = buf[0]
+	hdr.Version = buf[1]
+	hdr.Type = MsgType(buf[2])
+	hdr.Flags = buf[3]
+	hdr.BodySize = int32(binary.BigEndian.Uint32(buf[4:8]))
+	return
 }
-*/
+
+func (hdr *_MessageHeader) FillBuffer(buf []byte) {
+	buf[0] = hdr.Magic
+	buf[1] = hdr.Version
+	buf[2] = byte(hdr.Type)
+	buf[3] = hdr.Flags
+	binary.BigEndian.PutUint32(buf[4:8], uint32(hdr.BodySize))
+}
 
 var commonHeaderBytes = [8]byte{'X', '!'}
 
 func fillHeader(packet []byte, t MsgType) {
-	size := len(packet) - 8
+	size := len(packet) - MsgHeaderSize
 	if size < 0 {
-		panic("Can't reach here")
-	} else if size > MaxMessageSize {
-		// TODO
+		panic("msg body size < 0")
 	}
 	packet[0] = 'X'
 	packet[1] = '!'
@@ -70,7 +85,7 @@ type _HelloMessage struct {
 }
 
 func (m _HelloMessage) Type() MsgType {
-	return 'H'
+	return HelloMsgType
 }
 
 var helloMessageBytes = [8]byte{'X', '!', 'H'}
@@ -83,7 +98,7 @@ type _ByeMessage struct {
 }
 
 func (m _ByeMessage) Type() MsgType {
-	return 'B'
+	return ByeMsgType
 }
 
 var byeMessageBytes = [8]byte{'X', '!', 'B'}
@@ -108,12 +123,12 @@ func newOutCheck(cmd string, args any) *_OutCheck {
 		panic("vbs.Encoder error")
 	}
 	c := &_OutCheck{buf: b.Bytes()}
-	fillHeader(c.buf, 'C')
+	fillHeader(c.buf, CheckMsgType)
 	return c
 }
 
 func (c *_OutCheck) Type() MsgType {
-	return 'C'
+	return CheckMsgType
 }
 
 func (c *_OutCheck) Bytes() []byte {
@@ -149,7 +164,7 @@ func newOutQuest(txid int64, service, method string, ctx Context, args any) *_Ou
 }
 
 func (q *_OutQuest) Type() MsgType {
-	return 'Q'
+	return QuestMsgType
 }
 
 func (q *_OutQuest) Bytes() []byte {
@@ -162,8 +177,8 @@ func (q *_OutQuest) Bytes() []byte {
 		bp.PackInteger(&n, q.txid)
 		q.start = q.reserved - n
 		copy(q.buf[q.start:], bp[:n])
-		q.start -= HeaderSize
-		fillHeader(q.buf[q.start:], 'Q')
+		q.start -= MsgHeaderSize
+		fillHeader(q.buf[q.start:], QuestMsgType)
 	}
 	return q.buf[q.start:]
 }
@@ -214,7 +229,7 @@ func newOutAnswerExceptional(txid int64, args any) *_OutAnswer {
 }
 
 func (a *_OutAnswer) Type() MsgType {
-	return 'A'
+	return AnswerMsgType
 }
 
 func (a *_OutAnswer) Bytes() []byte {
@@ -227,8 +242,8 @@ func (a *_OutAnswer) Bytes() []byte {
 		bp.PackInteger(&n, a.txid)
 		a.start = a.reserved - n
 		copy(a.buf[a.start:], bp[:n])
-		a.start -= HeaderSize
-		fillHeader(a.buf[a.start:], 'A')
+		a.start -= MsgHeaderSize
+		fillHeader(a.buf[a.start:], AnswerMsgType)
 	}
 	return a.buf[a.start:]
 }
@@ -271,7 +286,7 @@ func newInCheck(buf []byte) *_InCheck {
 }
 
 func (q *_InCheck) Type() MsgType {
-	return 'C'
+	return CheckMsgType
 }
 
 type _InQuest struct {
@@ -295,7 +310,7 @@ func newInQuest(buf []byte) *_InQuest {
 }
 
 func (q *_InQuest) Type() MsgType {
-	return 'Q'
+	return QuestMsgType
 }
 
 type _InAnswer struct {
@@ -315,14 +330,14 @@ func newInAnswer(buf []byte) *_InAnswer {
 }
 
 func (a *_InAnswer) Type() MsgType {
-	return 'A'
+	return AnswerMsgType
 }
 
 func DecodeMessage(header _MessageHeader, buf []byte) (_Message, error) {
 	if header.Magic != 'X' || header.Version != '!' {
 		return nil, fmt.Errorf("Unknown message Magic(%d) and Version(%d)", header.Magic, header.Version)
 	}
-	if header.Type == 'H' || header.Type == 'B' {
+	if header.Type == HelloMsgType || header.Type == ByeMsgType {
 		if header.Flags != 0 || header.BodySize != 0 {
 			return nil, fmt.Errorf("Invalid Hello or Bye message")
 		}
@@ -330,16 +345,16 @@ func DecodeMessage(header _MessageHeader, buf []byte) (_Message, error) {
 
 	var msg _Message
 	switch header.Type {
-	case 'H':
-		msg = theHelloMessage
-	case 'B':
-		msg = theByeMessage
-	case 'C':
-		msg = newInCheck(buf)
-	case 'Q':
+	case QuestMsgType:
 		msg = newInQuest(buf)
-	case 'A':
+	case AnswerMsgType:
 		msg = newInAnswer(buf)
+	case CheckMsgType:
+		msg = newInCheck(buf)
+	case HelloMsgType:
+		msg = theHelloMessage
+	case ByeMsgType:
+		msg = theByeMessage
 	default:
 		return nil, fmt.Errorf("Unknown message Type(%d)", header.Type)
 	}

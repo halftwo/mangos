@@ -175,8 +175,7 @@ func (b *_Srp6aBase) ComputeM1() []byte {
 		}
 
 		if len(b._S) == 0 {
-			b.err = fmt.Errorf("S must be computed before M1 and M2")
-			return nil
+			panic("S must be computed before M1 and M2")
 		}
 
 		// Compute: M1 = SHA1(PAD(A) | PAD(B) | PAD(S))
@@ -211,8 +210,7 @@ func (b *_Srp6aBase) ComputeM2() []byte {
 func (b *_Srp6aBase) ComputeK() []byte {
 	if len(b._K) == 0 && b.err == nil {
 		if len(b._S) == 0 {
-			b.err = fmt.Errorf("S must be computed before K")
-			return nil
+			panic("S must be computed before K")
 		}
 
 		// Compute: K = SHA1(PAD(S))  
