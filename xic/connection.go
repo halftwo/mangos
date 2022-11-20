@@ -54,9 +54,9 @@ type _Connection struct {
 	adapter         atomic.Value // Adapter
 	serviceHint     string
 	cipher          *_Cipher
-	timeout         uint32
-	closeTimeout	uint32
-	connectTimeout	uint32
+	timeout         time.Duration
+	closeTimeout	time.Duration
+	connectTimeout	time.Duration
 	maxQ		int32
 	numQ		atomic.Int32
 	endpoint        *EndpointInfo
@@ -100,30 +100,39 @@ func _newConnection(engine *_Engine, incoming bool) *_Connection {
 	return con
 }
 
+func (con *_Connection) _set_timeouts(ei *EndpointInfo) {
+	if ei != nil {
+		con.timeout = timeout2duration(ei.timeout)
+		con.closeTimeout = timeout2duration(ei.closeTimeout)
+		con.connectTimeout = timeout2duration(ei.connectTimeout)
+
+		if con.closeTimeout == 0 {
+			con.closeTimeout = con.timeout
+		}
+		if con.connectTimeout == 0 {
+			con.connectTimeout = con.timeout
+		}
+	}
+}
+
 func newOutgoingConnection(engine *_Engine, serviceHint string, ei *EndpointInfo) *_Connection {
 	con := _newConnection(engine, false)
 	con.endpoint = ei
-	if ei != nil {
-		con.timeout = ei.timeout
-		con.closeTimeout = ei.closeTimeout
-		con.connectTimeout = ei.connectTimeout
 
-		if con.closeTimeout == 0 {
-			con.closeTimeout = ei.timeout
-		}
-		if con.connectTimeout == 0 {
-			con.connectTimeout = ei.timeout
-		}
-	}
+	con._set_timeouts(ei)
 	go con.client_run()
 	return con
 }
 
-func newIncomingConnection(adapter *_Adapter, c net.Conn) *_Connection {
+func newIncomingConnection(listener *_Listener, c net.Conn) *_Connection {
+	adapter := listener.adapter
 	con := _newConnection(adapter.engine, true)
 	con.c = c
+	con.endpoint = listener.endpoint
 	con.adapter.Store(adapter)
 	adapter.engine.incomingConnection(con)
+
+	con._set_timeouts(con.endpoint)
 	go con.server_run()
 	return con
 }
@@ -144,7 +153,7 @@ func (con *_Connection) String() string {
 
 func (con *_Connection) IsLive() bool { return con.state.Load() <= con_ACTIVE }
 func (con *_Connection) Incoming() bool { return con.incoming }
-func (con *_Connection) Timeout() uint32 { return con.timeout }
+func (con *_Connection) Timeout() uint32 { return uint32(con.timeout / time.Millisecond) }
 func (con *_Connection) Endpoint() string { return con.endpoint.String() }
 
 func (con *_Connection) Close(force bool) {
@@ -287,7 +296,7 @@ func (con *_Connection) check_send(cmd string, args any) bool {
 }
 
 func (con *_Connection) check_expect(cmd string, args any) bool {
-	msg := con.read_msg()
+	msg := con.must_read_msg()
 	check, ok := msg.(*_InCheck)
 	if !ok || check.cmd != cmd {
 		// TODO
@@ -363,7 +372,7 @@ func (con *_Connection) server_handshake() {
 }
 
 func (con *_Connection) client_handshake() {
-	msg := con.read_msg()
+	msg := con.must_read_msg()
 
 	if msg != nil && msg.Type() == 'C' {
 		var auth _AuthArgs
@@ -422,7 +431,7 @@ func (con *_Connection) client_handshake() {
 			return
 		}
 
-		msg = con.read_msg()
+		msg = con.must_read_msg()
 	}
 
 	if msg != nil && msg.Type() != HelloMsgType {
@@ -463,7 +472,7 @@ func (con *_Connection) client_run() {
 
 	con.state.Store(con_CONNECT)
 	ei := con.endpoint
-	con.c, err = net.DialTimeout(ei.proto, ei.Address(), timeout2duration(con.connectTimeout))
+	con.c, err = net.DialTimeout(ei.proto, ei.Address(), con.connectTimeout)
 	if err != nil {
 		con.state.Store(con_ERROR)
 		con.close_and_reply(true)
@@ -629,18 +638,48 @@ func ZZZ(x ...any) {
 	fmt.Println("XXX", file, line, x)
 }
 
-func (con *_Connection) _read_header(header *_MessageHeader) error {
-again:
-	state := con.state.Load()
-	timeout := con.timeout
-	if state > con_ACTIVE && con.closeTimeout > 0 {
-		timeout = con.closeTimeout
+func (con *_Connection) _msgDeadline() time.Time {
+	if con.timeout > 0 {
+		return time.Now().Add(con.timeout)
 	}
-	con.c.SetReadDeadline(timeout2deadline(timeout))
+	return time.Time{}
+}
+
+const _DEFAULT_CLOSE_TIMEOUT = time.Second * 900
+func (con *_Connection) _closeDeadline() time.Time {
+	now := time.Now()
+	if con.closeTimeout > 0 {
+		return now.Add(con.closeTimeout)
+	}
+	return now.Add(_DEFAULT_CLOSE_TIMEOUT)
+}
+
+const _DEFAULT_CONNECT_TIMEOUT = time.Second * 60
+func (con *_Connection) _connectDeadline() time.Time {
+	now := time.Now()
+	if con.connectTimeout > 0 {
+		return now.Add(con.connectTimeout)
+	}
+	return now.Add(_DEFAULT_CONNECT_TIMEOUT)
+}
+
+func (con *_Connection) _deadline() time.Time {
+	state := con.state.Load()
+	if state == con_ACTIVE {
+		return con._msgDeadline()
+	} else if state < con_ACTIVE {
+		return con._connectDeadline()
+	}
+	return con._closeDeadline()
+}
+
+func (con *_Connection) _read_header(header *_MessageHeader, mustget bool) error {
+again:
+	con.c.SetReadDeadline(con._deadline())
 	var buf [HeaderSize]byte
 	n, err := io.ReadFull(con.c, buf[:])
 	if err != nil {
-		if n == 0 && errors.Is(err, os.ErrDeadlineExceeded) {
+		if !mustget && n == 0 && errors.Is(err, os.ErrDeadlineExceeded) {
 			goto again
 		}
 		return err
@@ -649,9 +688,9 @@ again:
 	return binary.Read(bytes.NewReader(buf[:]), binary.BigEndian, header)
 }
 
-func (con *_Connection) read_msg() _Message {
+func (con *_Connection) read_msg(must bool) _Message {
 	var header _MessageHeader
-	if err := con._read_header(&header); err != nil {
+	if err := con._read_header(&header, must); err != nil {
 		con.err = err
 		return nil
 	}
@@ -677,11 +716,17 @@ func (con *_Connection) read_msg() _Message {
 	return msg
 }
 
+func (con *_Connection) must_read_msg() _Message {
+	return con.read_msg(true)
+}
+
+func (con *_Connection) try_read_msg() _Message {
+	return con.read_msg(false)
+}
+
 func (con *_Connection) send_msg(msg _OutMessage) error {
 	buf := msg.Bytes()
-	if con.timeout != 0 {
-		con.c.SetWriteDeadline(timeout2deadline(con.timeout))
-	}
+	con.c.SetWriteDeadline(con._deadline())
 	_, err := con.c.Write(buf)
 	return err
 }
@@ -769,7 +814,7 @@ func (con *_Connection) process_loop() {
 	go con.send_loop()
 
 	for {
-		msg := con.read_msg()
+		msg := con.try_read_msg()
 		if msg == nil {
 			break
 		}

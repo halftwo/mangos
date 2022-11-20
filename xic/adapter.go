@@ -30,8 +30,9 @@ type _Adapter struct {
 }
 
 type _Listener struct {
-	adapter *_Adapter
 	listener net.Listener
+	adapter *_Adapter
+	endpoint *EndpointInfo
 }
 
 func newListener(adapter *_Adapter, ei *EndpointInfo) (*_Listener, error) {
@@ -39,7 +40,7 @@ func newListener(adapter *_Adapter, ei *EndpointInfo) (*_Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	l := &_Listener{adapter:adapter, listener:listener}
+	l := &_Listener{listener:listener, adapter:adapter, endpoint:ei}
 	return l, nil
 }
 
@@ -52,7 +53,7 @@ func (l *_Listener) activate() {
 			}
 
 			// TODO
-			newIncomingConnection(l.adapter, c)
+			newIncomingConnection(l, c)
 		}
 	}()
 }
