@@ -1,3 +1,4 @@
+//go:build unix
 package xic
 
 import (

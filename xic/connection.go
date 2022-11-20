@@ -14,6 +14,8 @@ import (
 	"time"
 	"sync"
 	"sync/atomic"
+	"os"
+	"io"
 
 	"halftwo/mangos/dlog"
 	"halftwo/mangos/srp6a"
@@ -627,28 +629,47 @@ func ZZZ(x ...any) {
 	fmt.Println("XXX", file, line, x)
 }
 
+func (con *_Connection) _read_header(header *_MessageHeader) error {
+again:
+	state := con.state.Load()
+	timeout := con.timeout
+	if state > con_ACTIVE && con.closeTimeout > 0 {
+		timeout = con.closeTimeout
+	}
+	con.c.SetReadDeadline(timeout2deadline(timeout))
+	var buf [HeaderSize]byte
+	n, err := io.ReadFull(con.c, buf[:])
+	if err != nil {
+		if n == 0 && errors.Is(err, os.ErrDeadlineExceeded) {
+			goto again
+		}
+		return err
+	}
+
+	return binary.Read(bytes.NewReader(buf[:]), binary.BigEndian, header)
+}
+
 func (con *_Connection) read_msg() _Message {
 	var header _MessageHeader
-	if con.timeout != 0 {
-		con.c.SetReadDeadline(timeout2deadline(con.timeout))
-	}
-	if con.err = binary.Read(con.c, binary.BigEndian, &header); con.err != nil {
-		// TODO: con.err == io.EOF
-		return nil
-	}
-
-	if con.err = checkHeader(header); con.err != nil {
-		return nil
-	}
-
-	buf := make([]byte, header.BodySize)
-	n, err := con.c.Read(buf)
-	if err != nil {
+	if err := con._read_header(&header); err != nil {
 		con.err = err
 		return nil
-	} else if n != len(buf) {
-		con.err = fmt.Errorf("Received less data (%d) than specified in the header (%d)", n, len(buf))
+	}
+
+	if err := checkHeader(header); err != nil {
+		con.err = err
+		dlog.Log("XIC.WARN", "Invalid xic header %v", header)
 		return nil
+	}
+
+	var buf []byte
+	if header.BodySize > 0 {
+		buf = make([]byte, header.BodySize)
+		_, err := io.ReadFull(con.c, buf)
+		if err != nil {
+			con.err = err
+			return nil
+		}
 	}
 
 	msg, err := DecodeMessage(header, buf)

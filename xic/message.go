@@ -18,7 +18,7 @@ const (
 	AnswerMsgType         = 'A'
 )
 
-const headerSize = 8
+const HeaderSize = 8
 
 type _MessageHeader struct {
 	Magic    byte  // 'X'
@@ -162,7 +162,7 @@ func (q *_OutQuest) Bytes() []byte {
 		bp.PackInteger(&n, q.txid)
 		q.start = q.reserved - n
 		copy(q.buf[q.start:], bp[:n])
-		q.start -= headerSize
+		q.start -= HeaderSize
 		fillHeader(q.buf[q.start:], 'Q')
 	}
 	return q.buf[q.start:]
@@ -227,7 +227,7 @@ func (a *_OutAnswer) Bytes() []byte {
 		bp.PackInteger(&n, a.txid)
 		a.start = a.reserved - n
 		copy(a.buf[a.start:], bp[:n])
-		a.start -= headerSize
+		a.start -= HeaderSize
 		fillHeader(a.buf[a.start:], 'A')
 	}
 	return a.buf[a.start:]
