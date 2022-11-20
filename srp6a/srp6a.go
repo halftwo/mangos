@@ -242,8 +242,7 @@ func NewServerEmpty() *Srp6aServer {
 }
 
 func NewServer(g int, N []byte, bits int, hash string) *Srp6aServer {
-	srv := &Srp6aServer{}
-	srv._SComputer = srv
+	srv := NewServerEmpty()
 	srv.SetHash(hash)
 	srv.SetParameter(g, N, bits)
 	return srv
@@ -357,8 +356,7 @@ func NewClientEmpty() *Srp6aClient {
 }
 
 func NewClient(g int, N []byte, bits int, hash string) *Srp6aClient {
-	cli := &Srp6aClient{}
-	cli._SComputer = cli
+	cli := NewClientEmpty()
 	cli.SetHash(hash)
 	cli.SetParameter(g, N, bits)
 	return cli

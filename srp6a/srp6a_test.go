@@ -95,8 +95,8 @@ func BenchmarkSrp6a(b *testing.B) {
 		B := srv.GenerateB()
 		cli.SetB(B)
 
-		S1 := cli.ComputeS()
-		S2 := srv.ComputeS()
+		K1 := cli.ComputeK()
+		K2 := srv.ComputeK()
 
 		if err := srv.Err(); err != nil {
 			b.Fatalf("srv error: %v", err)
@@ -106,10 +106,10 @@ func BenchmarkSrp6a(b *testing.B) {
 			b.Fatalf("cli error: %v", err)
 		}
 
-		if !bytes.Equal(S1, S2) {
-			fmt.Println("S1", hex.EncodeToString(S1))
-			fmt.Println("S2", hex.EncodeToString(S2))
-			b.Fatalf("S1 and S2 differ")
+		if !bytes.Equal(K1, K2) {
+			fmt.Println("K1", hex.EncodeToString(K1))
+			fmt.Println("K2", hex.EncodeToString(K2))
+			b.Fatalf("K1 and K2 differ")
 		}
 	}
 }
