@@ -357,7 +357,6 @@ func (con *_Connection) server_handshake() {
 		var s3 _S3Args
 		con.check_expect(ck_SRP6a3, &s3)
 		srp6svr.SetA(s3.A)
-		srp6svr.ComputeS()
 		M1 := srp6svr.ComputeM1()
 		if !bytes.Equal(M1, s3.M1) {
 			con.err = errors.New("srp6a M1 not equal")
@@ -430,7 +429,6 @@ func (con *_Connection) client_handshake() {
 
 		var s3 _S3Args
 		s3.A = srp6cl.GenerateA()
-		srp6cl.ComputeS()
 		s3.M1 = srp6cl.ComputeM1()
 		if !con.check_send(ck_SRP6a3, &s3) {
 			return

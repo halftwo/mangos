@@ -20,7 +20,12 @@ import (
 const randomSize = 512/2/8
 const MinSaltSize = 16
 
+type _SComputer interface {
+	ComputeS() []byte
+}
+
 type _Srp6aBase struct {
+	_SComputer
 	err error
 	hashName string
 	hasher hash.Hash
@@ -175,7 +180,7 @@ func (b *_Srp6aBase) ComputeM1() []byte {
 		}
 
 		if len(b._S) == 0 {
-			panic("S must be computed before M1 and M2")
+			b.ComputeS()
 		}
 
 		// Compute: M1 = SHA1(PAD(A) | PAD(B) | PAD(S))
@@ -210,7 +215,7 @@ func (b *_Srp6aBase) ComputeM2() []byte {
 func (b *_Srp6aBase) ComputeK() []byte {
 	if len(b._K) == 0 && b.err == nil {
 		if len(b._S) == 0 {
-			panic("S must be computed before K")
+			b.ComputeS()
 		}
 
 		// Compute: K = SHA1(PAD(S))  
@@ -231,11 +236,14 @@ type Srp6aServer struct {
 }
 
 func NewServerEmpty() *Srp6aServer {
-	return &Srp6aServer{}
+	srv := &Srp6aServer{}
+	srv._SComputer = srv
+	return srv
 }
 
 func NewServer(g int, N []byte, bits int, hash string) *Srp6aServer {
 	srv := &Srp6aServer{}
+	srv._SComputer = srv
 	srv.SetHash(hash)
 	srv.SetParameter(g, N, bits)
 	return srv
@@ -343,11 +351,14 @@ type Srp6aClient struct {
 }
 
 func NewClientEmpty() *Srp6aClient {
-	return &Srp6aClient{}
+	cli := &Srp6aClient{}
+	cli._SComputer = cli
+	return cli
 }
 
 func NewClient(g int, N []byte, bits int, hash string) *Srp6aClient {
 	cli := &Srp6aClient{}
+	cli._SComputer = cli
 	cli.SetHash(hash)
 	cli.SetParameter(g, N, bits)
 	return cli
