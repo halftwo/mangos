@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"os/signal"
+	"sync/atomic"
 )
 
 func usage() {
@@ -53,7 +54,13 @@ func parseArgs() (file string, cfs map[string]string, args []string) {
 	return
 }
 
-func StartSetting(run EntreeFunction, setting Setting) error {
+var started atomic.Int32
+
+func start_with_setting(run EntreeFunction, setting Setting) error {
+	if !started.CompareAndSwap(0, 1) {
+		panic("function start_with_setting() can only be called once")
+	}
+
 	if setting == nil {
 		setting = NewSetting()
 	}
@@ -79,9 +86,5 @@ func StartSetting(run EntreeFunction, setting Setting) error {
 		usage()
 	}
 	return err
-}
-
-func Start(run EntreeFunction) error {
-	return StartSetting(run, nil)
 }
 

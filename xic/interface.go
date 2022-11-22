@@ -6,6 +6,14 @@ import (
 
 type EntreeFunction func(engine Engine, args []string) error
 
+func Start(run EntreeFunction) error {
+	return start_with_setting(run, nil)
+}
+
+func StartSetting(run EntreeFunction, setting Setting) error {
+	return start_with_setting(run, setting)
+}
+
 type Setting interface {
 	Set(name string, value string)
 	Remove(name string)
