@@ -87,6 +87,8 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 			dlog.Log("XIC.WARN", "Failed to open secret file %s", secret)
 		}
 	}
+
+	go engine.wait_signal_and_shutdown()
 	return engine
 }
 
@@ -213,7 +215,7 @@ func (engine *_Engine) Shutdown() {
 	}
 }
 
-func (engine *_Engine) wait_and_close_routine() {
+func (engine *_Engine) wait_signal_and_shutdown() {
 	exit := false
 	sig := <-engine.shutdownChan
 	if _, ok := sig.(PseudoShutdownSignal); !ok {
@@ -261,10 +263,6 @@ func (engine *_Engine) wait_and_close_routine() {
 }
 
 func (engine *_Engine) WaitForShutdown() {
-	engine.once.Do(func(){
-		go engine.wait_and_close_routine()
-	})
-
 	engine.mutex.Lock()
 	for engine.state < eng_SHUTTED {
 		engine.cond.Wait()
