@@ -35,19 +35,21 @@ func (cur *_Current) Method() string	{ return cur.method }
 func (cur *_Current) Ctx() Context	{ return cur.ctx }
 func (cur *_Current) Con() Connection	{ return cur.con }
 
+type _ConState int32
 const (
-	con_INIT	int32 = iota
+	con_INIT	_ConState = iota
 	con_CONNECT
 	con_HANDSHAKE
 	con_ACTIVE
 	con_CLOSING		// graceful closing is in process
+	con_BYE
 	con_CLOSED
 	con_ERROR
 )
 
 type _Connection struct {
 	c		net.Conn
-	state		atomic.Int32
+	state		_ConState
 	engine          *_Engine
 	incoming        bool
 	adapter         atomic.Value // Adapter
@@ -150,7 +152,7 @@ func (con *_Connection) String() string {
 	return fmt.Sprintf("%s/%s/%s", laddr.Network(), laddr.String(), raddr.String())
 }
 
-func (con *_Connection) IsLive() bool { return con.state.Load() <= con_ACTIVE }
+func (con *_Connection) IsLive() bool { return con.state <= con_ACTIVE }
 func (con *_Connection) Incoming() bool { return con.incoming }
 func (con *_Connection) Timeout() uint32 { return uint32(con.timeout / time.Millisecond) }
 func (con *_Connection) Endpoint() string { return con.endpoint.String() }
@@ -163,36 +165,60 @@ func (con *_Connection) Close(force bool) {
 	}
 }
 
-func (con *_Connection) closeGracefully() {
+func (con *_Connection) set_state(state _ConState) {
 	con.mutex.Lock()
-	con.state.Store(con_CLOSING)
-	con.cond.Broadcast()
+	if con.state < state {
+		con.state = state
+		con.cond.Broadcast()
+	}
 	con.mutex.Unlock()
 }
 
+func (con *_Connection) set_error(err error) {
+	con.mutex.Lock()
+	if con.state < con_CLOSED {
+		con.state = con_ERROR
+		con.err = err
+		con.cond.Broadcast()
+	}
+	con.mutex.Unlock()
+}
+
+func (con *_Connection) closeGracefully() {
+	con.set_state(con_CLOSING)
+}
+
 func (con *_Connection) closeForcefully() {
-	con.err = NewException(ConnectionClosedException, "")
+	err := NewException(ConnectionClosedException, "")
+	con.set_error(err)	// TODO
 	con.close_and_reply(false)
 }
 
 func (con *_Connection) close_and_reply(retryable bool) {
-	con.c.Close()
-
 	con.mutex.Lock()
+	netcon := con.c
+	con.c = nil
+
 	pending := con.pending
 	con.pending = nil
+
 	err := con.err
-	con.state.Store(con_CLOSED)
-	con.cond.Broadcast()
+	if err == nil {
+		con.state = con_CLOSED
+		con.cond.Broadcast()
+	}
 	con.mutex.Unlock()
 
-	if (retryable) {
+	if netcon != nil {
+		netcon.Close()
+	}
+
+	// TODO: retryable
+
+	for _, res := range pending {
 		// TODO
-	} else {
-		for _, res := range pending {
-			res.err = err
-			res.broadcast()
-		}
+		res.err = err
+		res.broadcast()
 	}
 }
 
@@ -230,20 +256,24 @@ func (con *_Connection) _generate_txid() int64 {
 }
 
 func (con *_Connection) invoke(prx *_Proxy, q *_OutQuest, res *_Result) {
-	if con.state.Load() > con_ACTIVE {
-		res.err = errors.New("Connection closing or closed")
-		return
+	ok := false
+	con.mutex.Lock()
+	if con.state <= con_ACTIVE {
+		ok = true
+		if q.txid != 0 {
+			txid := con._generate_txid()
+			res.txid = txid
+			q.txid = txid
+			con.pending[txid] = res
+		}
 	}
+	con.mutex.Unlock()
 
-	if res != nil && res.txid != 0 {
-		con.mutex.Lock()
-		txid := con._generate_txid()
-		res.txid = txid
-		con.pending[txid] = res
-		q.SetTxid(txid)
-		con.mutex.Unlock()
+	if ok {
+		con.sendMessage(q)
+	} else if res != nil {
+		res.err = errors.New("Connection closing or closed")
 	}
-	con.sendMessage(q)
 }
 
 func makePointerValue(t reflect.Type) reflect.Value {
@@ -289,9 +319,11 @@ type _S4Args struct {
 
 func (con *_Connection) check_send(cmd string, args any) bool {
 	msg := newOutCheck(cmd, args)
-	con.send_msg(msg)
-	// TODO
-	return con.err == nil
+	if err := con.send_msg(msg); err != nil {
+		con.set_error(err)
+		return false
+	}
+	return true
 }
 
 func expect_check_msg(msg _Message, cmd string, args any) error {
@@ -304,10 +336,14 @@ func expect_check_msg(msg _Message, cmd string, args any) error {
 
 func (con *_Connection) check_expect(cmd string, args any) bool {
 	msg := con.must_read_msg()
-	if msg != nil {
-		con.err = expect_check_msg(msg, cmd, args)
+	if msg == nil {
+		return false
 	}
-	return con.err == nil
+	if err := expect_check_msg(msg, cmd, args); err != nil {
+		con.set_error(err)
+		return false
+	}
+	return true
 }
 
 const (
@@ -319,30 +355,32 @@ const (
 	ck_SRP6a4       = "SRP6a4"
 )
 
-func (con *_Connection) server_handshake() {
+func (con *_Connection) server_handshake() bool {
+	var err error
+	con.set_state(con_HANDSHAKE)
 	if con.engine.shadowBox != nil {
 		var auth _AuthArgs
 		auth.Method = "SRP6a"
 		if !con.check_send(ck_AUTHENTICATE, &auth) {
-			return
+			goto done
 		}
 
 		var s1 _S1Args
 		if !con.check_expect(ck_SRP6a1, &s1) {
-			return
+			goto done
 		}
 
 		v := con.engine.shadowBox.GetVerifier(s1.I)
 		if v == nil {
-			con.err = errors.New("No such identity")
-			return
+			err = errors.New("No such identity")
+			goto done
 		}
 
+		var srp6svr *srp6a.Srp6aServer
 		var s2 _S2Args
-		srp6svr, err := con.engine.shadowBox.CreateSrp6aServer(v.ParamId, v.HashId)
+		srp6svr, err = con.engine.shadowBox.CreateSrp6aServer(v.ParamId, v.HashId)
 		if err != nil {
-			con.err = err
-			return
+			goto done
 		}
 		srp6svr.SetV(v.Verifier)
 		s2.Hash = srp6svr.HashName()
@@ -351,7 +389,7 @@ func (con *_Connection) server_handshake() {
 		s2.Salt = v.Salt
 		s2.B = srp6svr.GenerateB()
 		if !con.check_send(ck_SRP6a2, &s2) {
-			return
+			goto done
 		}
 
 		var s3 _S3Args
@@ -359,8 +397,8 @@ func (con *_Connection) server_handshake() {
 		srp6svr.SetA(s3.A)
 		M1 := srp6svr.ComputeM1()
 		if !bytes.Equal(M1, s3.M1) {
-			con.err = errors.New("srp6a M1 not equal")
-			return
+			err = errors.New("srp6a M1 not equal")
+			goto done
 		}
 
 		cihper_suite := con.engine.cipher
@@ -369,45 +407,48 @@ func (con *_Connection) server_handshake() {
 		s4.Cipher = cihper_suite.String()
 		s4.Mode = 1
 		if !con.check_send(ck_SRP6a4, &s4) {
-			return
+			goto done
 		}
 
 		key := srp6svr.ComputeK()
-		con.cipher, con.err = newXicCipher(cihper_suite, key, true)
-		if con.err != nil {
-			return
+		if con.cipher, err = newXicCipher(cihper_suite, key, true); err != nil {
+			goto done
 		}
 	}
 
-	if con.err == nil {
-		con.send_msg(theHelloMessage)
+	err = con.send_msg(theHelloMessage)
+done:
+	if err != nil {
+		con.set_error(err)
+		return false
 	}
+	return true
 }
 
-func (con *_Connection) client_handshake() {
+func (con *_Connection) client_handshake() bool {
+	var err error
+	con.set_state(con_HANDSHAKE)
 	msg := con.must_read_msg()
-
 	if msg != nil && msg.Type() == CheckMsgType {
 		var auth _AuthArgs
-		con.err = expect_check_msg(msg, ck_AUTHENTICATE, &auth)
-		if con.err != nil {
-			return
+		if err = expect_check_msg(msg, ck_AUTHENTICATE, &auth); err != nil {
+			goto done
 		}
 
 		if auth.Method != "SRP6a" {
-			con.err = errors.New("Unknown auth method")
-			return
+			err = errors.New("Unknown auth method")
+			goto done
 		}
 
 		if con.engine.secretBox == nil {
-			con.err = errors.New("No SecretBox supplied")
-			return
+			err = errors.New("No SecretBox supplied")
+			goto done
 		}
 
 		id, pass := con.engine.secretBox.FindEndpoint(con.serviceHint, con.endpoint)
 		if id == "" || pass == "" {
-			con.err = errors.New("No matched secret found")
-			return
+			err = errors.New("No matched secret found")
+			goto done
 		}
 
 		srp6cl := srp6a.NewClientEmpty()
@@ -416,7 +457,7 @@ func (con *_Connection) client_handshake() {
 		var s1 _S1Args
 		s1.I = id
 		if !con.check_send(ck_SRP6a1, &s1) {
-			return
+			goto done
 		}
 
 		var s2 _S2Args
@@ -431,49 +472,46 @@ func (con *_Connection) client_handshake() {
 		s3.A = srp6cl.GenerateA()
 		s3.M1 = srp6cl.ComputeM1()
 		if !con.check_send(ck_SRP6a3, &s3) {
-			return
+			goto done
 		}
 
 		var s4 _S4Args
 		if !con.check_expect(ck_SRP6a4, &s4) {
-			return
+			goto done
 		}
 
 		M2 := srp6cl.ComputeM2()
 		if !bytes.Equal(M2, s4.M2) {
-			con.err = errors.New("srp6a M2 not equal")
-			return
+			err = errors.New("srp6a M2 not equal")
+			goto done
 		}
 
 		key := srp6cl.ComputeK()
 		suite := String2CipherSuite(s4.Cipher)
-		con.cipher, con.err = newXicCipher(suite, key, false)
-		if con.err != nil {
-			return
+		if con.cipher, err = newXicCipher(suite, key, false); err != nil {
+			goto done
 		}
 
 		msg = con.must_read_msg()
 	}
 
 	if msg != nil && msg.Type() != HelloMsgType {
-		con.err = errors.New("Unexpected message received, expect Hello message")
-		return
+		err = errors.New("Unexpected message received, expect Hello message")
 	}
+done:
+	if err != nil {
+		con.set_error(err)
+		return false
+	}
+	return true
 }
 
 func (con *_Connection) server_run() {
-	con.state.Store(con_HANDSHAKE)
-	con.server_handshake()
-
-	if con.err != nil {
-		var forbidden _ForbiddenArgs
-		forbidden.Reason = con.err.Error()
-		con.check_send(ck_FORBIDDEN, &forbidden)
+	if !con.server_handshake() {
 		con.close_and_reply(true)
 		return
 	}
 
-	con.state.Store(con_ACTIVE)
 	con.process_loop()
 }
 
@@ -489,28 +527,21 @@ func timeout2deadline(timeout uint32) time.Time {
 }
 
 func (con *_Connection) client_run() {
-	var err error
-
-	con.state.Store(con_CONNECT)
+	con.set_state(con_CONNECT)
 	ei := con.endpoint
-	con.c, err = net.DialTimeout(ei.proto, ei.Address(), con.connectTimeout)
+	netc, err := net.DialTimeout(ei.proto, ei.Address(), con.connectTimeout)
 	if err != nil {
-		con.state.Store(con_ERROR)
+		con.set_error(err)
 		con.close_and_reply(true)
 		return
 	}
 
-	con.state.Store(con_HANDSHAKE)
-	con.client_handshake()
-
-	if con.err != nil {
-		ZZZ(con.err)
-		con.state.Store(con_ERROR)
+	con.c = netc
+	if !con.client_handshake() {
 		con.close_and_reply(true)
 		return
 	}
 
-	con.state.Store(con_ACTIVE)
 	con.process_loop()
 }
 
@@ -609,6 +640,9 @@ func (con *_Connection) handleAnswer(answer *_InAnswer) {
 	if ok {
 		delete(con.pending, answer.txid)
 	}
+	if con.byebye_ok() {
+		con.cond.Broadcast()
+	}
 	con.mutex.Unlock()
 
 	if !ok {
@@ -688,7 +722,10 @@ func (con *_Connection) _connectDeadline() time.Time {
 }
 
 func (con *_Connection) _deadline() time.Time {
-	state := con.state.Load()
+	con.mutex.Lock()
+	state := con.state
+	con.mutex.Unlock()
+
 	if state == con_ACTIVE {
 		return con._msgDeadline()
 	} else if state < con_ACTIVE {
@@ -709,61 +746,74 @@ again:
 	return err
 }
 
-func (con *_Connection) read_msg(must bool) _Message {
+func (con *_Connection) recv_msg(must bool) (msg _Message) {
+	var err error
+	var bodybuf []byte
 	var headbuf [MsgHeaderSize]byte
-	if err := con._read_header(headbuf[:], must); err != nil {
-		con.err = err
-		return nil
+	if err = con._read_header(headbuf[:], must); err != nil {
+		if err == io.EOF {
+			con.mutex.Lock()
+			if con.state == con_BYE {
+				err = nil
+			}
+			con.mutex.Unlock()
+
+			if err == nil {
+				con.close_and_reply(true)
+				return
+			}
+		}
+		con.set_error(err)
+		return
 	}
 
 	header := buf2header(headbuf[:])
-	if err := checkHeader(header); err != nil {
-		con.err = err
+	if err = checkHeader(header); err != nil {
 		dlog.Log("XIC.WARN", "Invalid xic header %v", header)
-		return nil
+		goto done
 	}
 
-	var bodybuf []byte
 	if header.BodySize > 0 {
 		bodybuf = make([]byte, header.BodySize)
-		_, err := io.ReadFull(con.c, bodybuf)
-		if err != nil {
-			con.err = err
-			return nil
+		if _, err = io.ReadFull(con.c, bodybuf); err != nil {
+			goto done
 		}
 	}
 
 	if (header.Flags & FLAG_CIPHER) != 0 {
 		cipher := con.cipher
 		if cipher == nil {
-			con.err = errors.New("FLAG_CIPHER set but no cipher negotiated")
-			return nil
+			err = errors.New("FLAG_CIPHER set but no cipher negotiated")
+			goto done
 		}
 		if header.BodySize <= CipherMacSize {
-			con.err = errors.New("Invalid message BodySize")
-			return nil
+			err = errors.New("Invalid message BodySize")
+			goto done
 		}
 		header.BodySize -= CipherMacSize
 		cipher.InputStart(headbuf[:])
 		cipher.InputUpdate(bodybuf, bodybuf[:header.BodySize])
 		if !cipher.InputFinish(bodybuf[header.BodySize:]) {
-			con.err = errors.New("Failed to decrypt msg body")
-			return nil
+			err = errors.New("Failed to decrypt msg body")
+			goto done
 		}
 		bodybuf = bodybuf[:header.BodySize]
 	}
 
-	msg, err := DecodeMessage(header, bodybuf)
-	con.err = err
-	return msg
+	msg, err = DecodeMessage(header, bodybuf)
+done:
+	if err != nil {
+		con.set_error(err)
+	}
+	return
 }
 
 func (con *_Connection) must_read_msg() _Message {
-	return con.read_msg(true)
+	return con.recv_msg(true)
 }
 
 func (con *_Connection) try_read_msg() _Message {
-	return con.read_msg(false)
+	return con.recv_msg(false)
 }
 
 func (con *_Connection) send_msg(msg _OutMessage) error {
@@ -787,7 +837,11 @@ func (con *_Connection) send_msg(msg _OutMessage) error {
 
 	con.c.SetWriteDeadline(con._deadline())
 	_, err := con.c.Write(buf)
-	if encrypted && err == nil {
+	if err != nil {
+		return err
+	}
+
+	if encrypted {
 		_, err = con.c.Write(mac[:])
 	}
 	return err
@@ -801,8 +855,31 @@ func (con *_Connection) sendMessage(msg _OutMessage) {
 	con.mutex.Unlock()
 }
 
+func (con *_Connection) byebye_ok() bool {
+	return con.state == con_CLOSING && con.numQ.Load() == 0 && len(con.pending) == 0
+}
+
 func (con *_Connection) send_loop() {
+	var err error
 	for {
+		con.mutex.Lock()
+		for con.mq.Num() == 0 && con.state <= con_CLOSING && !con.byebye_ok() {
+			con.cond.Wait()
+		}
+		state := con.state
+		byebye := con.byebye_ok()
+		con.mutex.Unlock()
+
+		if state > con_CLOSING {
+			goto done
+		} else if byebye {
+			err = con.send_msg(theByeMessage)
+			if err == nil {
+				con.set_state(con_BYE)
+			}
+			goto done
+		}
+
 		for {
 			con.mutex.Lock()
 			msg := con.mq.PopFront()
@@ -812,69 +889,53 @@ func (con *_Connection) send_loop() {
 				break
 			}
 
-			doit := false
-			switch msg.Type() {
-			case QuestMsgType:
-				if con.state.Load() == con_ACTIVE {
-					doit = true
-				}
-			case AnswerMsgType:
-				doit = true
+			if msg.Type() == AnswerMsgType {
 				con.numQ.Add(-1)
-			default:
-				panic("Can't reach here")
 			}
 
-			if doit {
-				if err := con.send_msg(msg); err != nil {
-					con.err = err
-					break
-				}
+			err = con.send_msg(msg)
+			if err != nil {
+				goto done
 			}
 		}
-
-		con.mutex.Lock()
-		state := con.state.Load()
-		silent := (con.numQ.Load() == 0 && len(con.pending) == 0)
-		con.mutex.Unlock()
-
-		if (state > con_ACTIVE) {
-			if (state == con_CLOSING && silent) {
-				con.send_msg(theByeMessage)
-			}
-			return
-		}
-
-		con.mutex.Lock()
-		for con.mq.Num() == 0 && con.state.Load() == con_ACTIVE {
-			con.cond.Wait()
-		}
-		con.mutex.Unlock()
+	}
+done:
+	if err != nil {
+		con.set_error(err)
 	}
 }
 
-func (con *_Connection) check_overload(quest *_InQuest) bool {
-	if con.maxQ > 0 && con.numQ.Load() >= con.maxQ {
-		answer := err2OutAnswer(quest, NewException(ConnectionOverloadException, ""))
-		con.sendMessage(answer)
-		return true
-	}
-
+func (con *_Connection) check_doable(quest *_InQuest) bool {
+	var err error
+	doit := false
 	engine := con.engine
-	if engine.numQ.Load() >= engine.maxQ {
-		answer := err2OutAnswer(quest, NewException(ConnectionOverloadException, ""))
-		con.sendMessage(answer)
-		return true
-	}
 
-	engine.numQ.Add(1)
-	con.numQ.Add(1)
-	return false
+	con.mutex.Lock()
+	if con.state == con_ACTIVE {
+		if con.maxQ > 0 && con.numQ.Load() >= con.maxQ {
+			err = NewException(ConnectionOverloadException, "")
+		} else if engine.numQ.Load() >= engine.maxQ {
+			err = NewException(ConnectionOverloadException, "")
+		} else {
+			doit = true
+			engine.numQ.Add(1)
+			con.numQ.Add(1)
+		}
+	}
+	con.mutex.Unlock()
+
+	if err != nil {
+		answer := err2OutAnswer(quest, err)
+		con.sendMessage(answer)
+	}
+	return doit
 }
 
 func (con *_Connection) process_loop() {
+	con.set_state(con_ACTIVE)
 	go con.send_loop()
 
+	var err error
 	for {
 		msg := con.try_read_msg()
 		if msg == nil {
@@ -883,23 +944,12 @@ func (con *_Connection) process_loop() {
 
 		switch msg.Type() {
 		case QuestMsgType:
-			state := con.state.Load()
-			if state == con_ACTIVE {
-				quest := msg.(*_InQuest)
-				if con.check_overload(quest) {
-					break
-				}
-
+			quest := msg.(*_InQuest)
+			if con.check_doable(quest) {
 				adp := con.adapter.Load()
 				adapter := adp.(Adapter)
 				go con.handleQuest(adapter, quest)
-			} else if state == con_CLOSING {
-				// do nothing
-				// the Quest is discarded
-			} else {
-				con.err = errors.New("Unexpected Quest message received")
 			}
-			// TODO
 
 		case AnswerMsgType:
 			answer := msg.(*_InAnswer)
@@ -907,21 +957,23 @@ func (con *_Connection) process_loop() {
 
 		case ByeMsgType:
 			ZZZ("Bye")
-			// TODO: some checks?
+			con.mutex.Lock()
+			state := con.state
+			if state < con_CLOSED && con.numQ.Load() > 0 {
+				err = fmt.Errorf("Unexpected xic bye message")
+			}
+			con.mutex.Unlock()
 			goto done
 
-		case CheckMsgType:
-			con.err = errors.New("Unexpected Check message received")
-		case HelloMsgType:
-			con.err = errors.New("Unexpected Hello message received")
-		}
-
-		if con.err != nil {
-			break
+		default:
+			err = fmt.Errorf("Unexpected xic message type(%#x) received", msg.Type())
+			goto done
 		}
 	}
 done:
-	con.err = ByeMessageException
+	if err != nil {
+		con.set_error(err)
+	}
 	con.close_and_reply(true)
 }
 

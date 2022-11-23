@@ -7,6 +7,6 @@ import (
 )
 
 func install_additional_signals(engine *_Engine) {
-	signal.Notify(engine.shutdownChan, syscall.SIGTERM)
+	signal.Notify(engine.sigChan, syscall.SIGTERM)
 }
 

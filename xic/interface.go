@@ -1,32 +1,46 @@
 package xic
 
 import (
+	"os"
 	"reflect"
 )
 
 /*
-  server EntreeFunction:
+   Server EntreeFunction procedure:
   	Engine.CreateAdapter
 	Adapter.AddServant
 	...
 	Adapter.Activate
 
-  client EntreeFunction:
+   Client EntreeFunction procedure:
   	Engine.StringToProxy
 	Proxy.Invoke
 	...
 	Engine.Shutdown
- */
+*/
 type EntreeFunction func(engine Engine, args []string) error
+
+/*
+   Normal SignalHandler procedure:
+	sig := <-sigChan
+	Engine.Shutdown
+	Engine.WaitForShutdown
+	os.Exit
+*/
+type SignalHandler func(sigChan <-chan os.Signal)
 
 
 // Run the entree function and Engine.WaitForShutdown()
 func Start(entree EntreeFunction) error {
-	return start_with_setting(entree, nil)
+	return start_setting_signal(entree, nil, nil)
 }
 
 func StartSetting(entree EntreeFunction, setting Setting) error {
-	return start_with_setting(entree, setting)
+	return start_setting_signal(entree, setting, nil)
+}
+
+func StartSettingSignal(entree EntreeFunction, setting Setting, sigFun SignalHandler) error {
+	return start_setting_signal(entree, setting, sigFun)
 }
 
 type Setting interface {
@@ -55,6 +69,7 @@ type Setting interface {
 	LoadFile(filename string) error
 }
 
+
 type Engine interface {
 	Setting() Setting
 	Name() string
@@ -71,6 +86,8 @@ type Engine interface {
 
 	SetSecretBox(secret *SecretBox)
 	SetShadowBox(secret *ShadowBox)
+
+	SignalChannel() chan<- os.Signal
 
 	Shutdown()
 	WaitForShutdown()
@@ -140,9 +157,6 @@ type Proxy interface {
 
 	Context() Context
 	SetContext(ctx Context)
-
-	Connection() Connection
-	ResetConnection()
 
 	LoadBalance() LoadBalance
 

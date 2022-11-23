@@ -57,7 +57,7 @@ func usage() {
 }
 
 var started atomic.Int32
-func start_with_setting(run EntreeFunction, setting Setting) error {
+func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalHandler) error {
 	if !started.CompareAndSwap(0, 1) {
 		panic("function start_with_setting() can only be called once")
 	}
@@ -77,11 +77,16 @@ func start_with_setting(run EntreeFunction, setting Setting) error {
 		setting.Set(k, v)
 	}
 
-	// TODO
 	engine := newEngineSetting(setting)
-	signal.Notify(engine.shutdownChan, os.Interrupt)
+	if sigFun == nil {
+		sigFun = engine.sig_handler_routine
+	}
+	go sigFun(engine.sigChan)
+
+	signal.Notify(engine.sigChan, os.Interrupt)
 	install_additional_signals(engine)
-	err := run(engine, args)
+
+	err := entree(engine, args)
 	if err != nil {
 		dlog.SetOption(dlog.OPT_STDERR)
 		dlog.Log("ERROR", "%s", err.Error())

@@ -36,7 +36,8 @@ type _Engine struct {
 	proxyMap map[string]*_Proxy
 	outConMap map[string]*_Connection
 	inConList []*_Connection
-	shutdownChan chan os.Signal
+
+	sigChan chan os.Signal
 
 	once sync.Once
 	state int
@@ -51,14 +52,13 @@ func newEngineSetting(setting Setting) *_Engine {
 }
 
 func newEngineSettingName(setting Setting, name string) *_Engine {
-	// TODO
 	id := GenerateRandomBase57Id(23)
 	engine := &_Engine{
 		setting: setting,
 		name: name,
 		id: id,
 		maxQ: DEFAULT_MAX_QUEST_NUMBER,
-		shutdownChan: make(chan os.Signal, 1),
+		sigChan: make(chan os.Signal, 1),
 	}
 	engine.cond.L = &engine.mutex
 
@@ -88,7 +88,7 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 		}
 	}
 
-	go engine.wait_signal_and_shutdown()
+	go engine.wait_for_shutting_routine()
 	return engine
 }
 
@@ -97,6 +97,10 @@ func (engine *_Engine) Shutted() bool {
 	shutted := (engine.state == eng_SHUTTED)
 	engine.mutex.Unlock()
 	return shutted
+}
+
+func (engine *_Engine) SignalChannel() chan<- os.Signal {
+	return engine.sigChan
 }
 
 func (engine *_Engine) Setting() Setting {
@@ -140,9 +144,10 @@ func (engine *_Engine) CreateAdapterEndpoints(name string, endpoints string) (Ad
 		name = "xic"
 	}
 	if endpoints == "" {
-		endpoints = engine.setting.Get(name + ".Endpoints")
+		itemkey := name + ".Endpoints"
+		endpoints = engine.setting.Get(itemkey)
 		if endpoints == "" {
-			return nil, fmt.Errorf("No endpoints for Adapter(%s)", name)
+			return nil, fmt.Errorf("%s not set", itemkey)
 		}
 	}
 
@@ -203,29 +208,40 @@ func (engine *_Engine) StringToProxy(proxy string) (Proxy, error) {
 	return prx, nil
 }
 
-// implements os.Signal interface
-type PseudoShutdownSignal struct{}
-func (s PseudoShutdownSignal) String() string { return "shutdown" }
-func (s PseudoShutdownSignal) Signal() {}
-
 func (engine *_Engine) Shutdown() {
-	select {
-	case engine.shutdownChan<- PseudoShutdownSignal{}:
-	default:
+	engine.mutex.Lock()
+	if engine.state < eng_SHUTTING {
+		engine.state = eng_SHUTTING
+		engine.cond.Broadcast()
 	}
+	engine.mutex.Unlock()
 }
 
-func (engine *_Engine) wait_signal_and_shutdown() {
-	exit := false
-	sig := <-engine.shutdownChan
-	if _, ok := sig.(PseudoShutdownSignal); !ok {
-		exit = true
-		fmt.Fprintln(os.Stderr, "XIC: signal", sig.String(), "received")
-	}
-
+func (engine *_Engine) WaitForShutdown() {
 	engine.mutex.Lock()
-	engine.state = eng_SHUTTING
+	for engine.state < eng_SHUTTED {
+		engine.cond.Wait()
+	}
+	engine.mutex.Unlock()
+}
 
+func (engine *_Engine) sig_handler_routine(sigChan <-chan os.Signal) {
+	sig, ok := <-sigChan
+	if ok {
+		fmt.Fprintln(os.Stderr, "XIC: signal", sig.String(), "received, shutting down.")
+	} else {
+		fmt.Fprintln(os.Stderr, "XIC: channel of signal closed, shutting down.")
+	}
+	engine.Shutdown()
+	engine.WaitForShutdown()
+	os.Exit(0)
+}
+
+func (engine *_Engine) wait_for_shutting_routine() {
+	engine.mutex.Lock()
+	for engine.state < eng_SHUTTING {
+		engine.cond.Wait()
+	}
 	adapterMap := engine.adapterMap
 	engine.adapterMap = nil
 
@@ -255,19 +271,6 @@ func (engine *_Engine) wait_signal_and_shutdown() {
 	engine.state = eng_SHUTTED
 	engine.cond.Broadcast()
 	engine.mutex.Unlock()
-
-	if exit {
-		time.Sleep(time.Second)
-		os.Exit(0)
-	}
-}
-
-func (engine *_Engine) WaitForShutdown() {
-	engine.mutex.Lock()
-	for engine.state < eng_SHUTTED {
-		engine.cond.Wait()
-	}
-	engine.mutex.Unlock()
 }
 
 func (engine *_Engine) makeFixedProxy(service string, con *_Connection) (Proxy, error) {
@@ -279,12 +282,12 @@ func (engine *_Engine) makeFixedProxy(service string, con *_Connection) (Proxy, 
 
 	prx, ok := engine.proxyMap[service]
 	if ok {
-		if prx.Connection() == con {
+		if prx.fixed && prx.cons[0] == con {
 			return prx, nil
 		}
 	}
 
-	prx = newProxyConnection(engine, service, con)
+	prx = newProxyWithConnection(engine, service, con)
 	engine.proxyMap[service] = prx
 	return prx, nil
 }
