@@ -30,6 +30,8 @@ func run(engine xic.Engine, args []string) error {
 	answer = xic.NewArguments()
 	err = prx.Invoke("time", quest, &answer)
 	fmt.Println(err, answer)
+
+	engine.Shutdown()
 	return nil
 }
 

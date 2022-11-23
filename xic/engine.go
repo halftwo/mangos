@@ -5,6 +5,8 @@ import (
 	"sync"
 	"os"
 	"math"
+	"time"
+	"errors"
 	"sync/atomic"
 
 	"halftwo/mangos/dlog"
@@ -12,8 +14,13 @@ import (
 
 const DEFAULT_MAX_QUEST_NUMBER = 10000
 
+const (
+	eng_ACTIVE = iota
+	eng_SHUTTING
+	eng_SHUTTED
+)
+
 type _Engine struct {
-	mutex sync.Mutex
 	setting Setting
 	name string
 	id string
@@ -30,11 +37,14 @@ type _Engine struct {
 	outConMap map[string]*_Connection
 	inConList []*_Connection
 	shutdownChan chan os.Signal
+
+	once sync.Once
+	state int
+	mutex sync.Mutex
+	cond sync.Cond
 }
 
-func newEngine() *_Engine {
-	return newEngineSettingName(NewSetting(), "")
-}
+var ErrEngineShutted = errors.New("Engine is shutting or shutted")
 
 func newEngineSetting(setting Setting) *_Engine {
 	return newEngineSettingName(setting, "")
@@ -50,6 +60,8 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 		maxQ: DEFAULT_MAX_QUEST_NUMBER,
 		shutdownChan: make(chan os.Signal, 1),
 	}
+	engine.cond.L = &engine.mutex
+
 	var err error
 	engine.adapterMap = make(map[string]*_Adapter)
 	engine.proxyMap = make(map[string]*_Proxy)
@@ -115,16 +127,14 @@ func (engine *_Engine) CreateAdapter(name string) (Adapter, error) {
 }
 
 func (engine *_Engine) CreateAdapterEndpoints(name string, endpoints string) (Adapter, error) {
-	// TODO
 	if name == "" {
 		name = "xic"
 	}
-	if endpoints == "" && engine.setting != nil {
-		endpoints = engine.setting.Get(name + ".Endpoints")
-	}
-
 	if endpoints == "" {
-		return nil, fmt.Errorf("No endpoints for Adapter(%s)", name)
+		endpoints = engine.setting.Get(name + ".Endpoints")
+		if endpoints == "" {
+			return nil, fmt.Errorf("No endpoints for Adapter(%s)", name)
+		}
 	}
 
 	adapter, err := newAdapter(engine, name, endpoints)
@@ -155,6 +165,10 @@ func (engine *_Engine) CreateSlackAdapter() (Adapter, error) {
 func addAdapter(engine *_Engine, adapter *_Adapter) error {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
+	if engine.state != eng_ACTIVE {
+		return ErrEngineShutted
+	}
+
 	_, ok := engine.adapterMap[adapter.Name()]
 	if ok {
 		return fmt.Errorf("Adapter(%s) already created", adapter.Name())
@@ -164,6 +178,12 @@ func addAdapter(engine *_Engine, adapter *_Adapter) error {
 }
 
 func (engine *_Engine) StringToProxy(proxy string) (Proxy, error) {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+	if engine.state != eng_ACTIVE {
+		return nil, ErrEngineShutted
+	}
+
 	prx, ok := engine.proxyMap[proxy]
 	if ok {
 		return prx, nil
@@ -179,34 +199,72 @@ type PseudoShutdownSignal struct{}
 func (s PseudoShutdownSignal) String() string { return "shutdown" }
 func (s PseudoShutdownSignal) Signal() {}
 
-
 func (engine *_Engine) Shutdown() {
-	engine.shutdownChan<- PseudoShutdownSignal{}
+	select {
+	case engine.shutdownChan<- PseudoShutdownSignal{}:
+	default:
+	}
 }
 
-func (engine *_Engine) WaitForShutdown() {
+func (engine *_Engine) wait_and_close_routine() {
 	sig := <-engine.shutdownChan
-	if _, ok := sig.(PseudoShutdownSignal); ok {
-		fmt.Println("WaitForShutdown: method Shutdown called")
-	} else {
-		fmt.Println("WaitForShutdown: signal", sig.String(), "received")
+	if _, ok := sig.(PseudoShutdownSignal); !ok {
+		fmt.Fprintln(os.Stderr, "xic: signal", sig.String(), "received")
 	}
 
-	// TODO
+	engine.mutex.Lock()
+	engine.state = eng_SHUTTING
+
+	adapterMap := engine.adapterMap
+	engine.adapterMap = nil
+
 	inConList := engine.inConList
 	engine.inConList = nil
+
 	outConMap := engine.outConMap
 	engine.outConMap = nil
 
+	engine.proxyMap = nil
+	engine.mutex.Unlock()
+
+	for _, a := range adapterMap {
+		a.Deactivate()
+	}
 	for _, c := range inConList {
 		c.closeGracefully()
 	}
 	for _, c := range outConMap {
 		c.closeGracefully()
 	}
+
+	// TODO: wait for connections closed
+	time.Sleep(time.Millisecond)	// XXX
+
+	engine.mutex.Lock()
+	engine.state = eng_SHUTTED
+	engine.cond.Broadcast()
+	engine.mutex.Unlock()
+}
+
+func (engine *_Engine) WaitForShutdown() {
+	engine.once.Do(func(){
+		go engine.wait_and_close_routine()
+	})
+
+	engine.mutex.Lock()
+	for engine.state < eng_SHUTTED {
+		engine.cond.Wait()
+	}
+	engine.mutex.Unlock()
 }
 
 func (engine *_Engine) makeFixedProxy(service string, con *_Connection) (Proxy, error) {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+	if engine.state != eng_ACTIVE {
+		return nil, ErrEngineShutted
+	}
+
 	prx, ok := engine.proxyMap[service]
 	if ok {
 		if prx.Connection() == con {
@@ -220,6 +278,12 @@ func (engine *_Engine) makeFixedProxy(service string, con *_Connection) (Proxy, 
 }
 
 func (engine *_Engine) makeConnection(serviceHint string, endpoint string) (*_Connection, error) {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+	if engine.state != eng_ACTIVE {
+		return nil, ErrEngineShutted
+	}
+
 	con, ok := engine.outConMap[endpoint]
 	if ok {
 		if con.IsLive() {
@@ -238,6 +302,8 @@ func (engine *_Engine) makeConnection(serviceHint string, endpoint string) (*_Co
 }
 
 func (engine *_Engine) incomingConnection(con *_Connection) {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
 	engine.inConList = append(engine.inConList, con)
 }
 

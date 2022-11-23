@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"time"
 	"halftwo/mangos/xic"
 	"halftwo/mangos/dlog"
@@ -67,10 +66,9 @@ func run(engine xic.Engine, args []string) error {
 	servant := newServant(adapter)
 	_, err = adapter.AddServant("Demo", servant)
 	if err != nil {
-		fmt.Println("ERR", err)
+		return err
 	}
 	adapter.Activate()
-	engine.WaitForShutdown()
 	return nil
 }
 

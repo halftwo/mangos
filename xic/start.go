@@ -8,12 +8,6 @@ import (
 	"sync/atomic"
 )
 
-func usage() {
-	fmt.Fprintf(os.Stderr, "\nUsage: %s --xic.conf=<config_file> [--AAA.BBB=ZZZ]\n\n",
-		os.Args[0])
-	os.Exit(1)
-}
-
 func parseArgs() (file string, cfs map[string]string, args []string) {
 	args = append(args, os.Args[0])
 	i := 1
@@ -54,8 +48,13 @@ func parseArgs() (file string, cfs map[string]string, args []string) {
 	return
 }
 
-var started atomic.Int32
+func usage() {
+	fmt.Fprintf(os.Stderr, "\nUsage: %s --xic.conf=<config_file> [--AAA.BBB=ZZZ]\n\n",
+		os.Args[0])
+	os.Exit(1)
+}
 
+var started atomic.Int32
 func start_with_setting(run EntreeFunction, setting Setting) error {
 	if !started.CompareAndSwap(0, 1) {
 		panic("function start_with_setting() can only be called once")
@@ -84,7 +83,10 @@ func start_with_setting(run EntreeFunction, setting Setting) error {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ERROR:", err)
 		usage()
+		return err
 	}
-	return err
+
+	engine.WaitForShutdown();
+	return nil
 }
 

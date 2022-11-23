@@ -4,14 +4,29 @@ import (
 	"reflect"
 )
 
+/*
+  server EntreeFunction:
+  	Engine.CreateAdapter
+	Adapter.AddServant
+	...
+	Adapter.Activate
+
+  client EntreeFunction:
+  	Engine.StringToProxy
+	Proxy.Invoke
+	...
+	Engine.Shutdown
+ */
 type EntreeFunction func(engine Engine, args []string) error
 
-func Start(run EntreeFunction) error {
-	return start_with_setting(run, nil)
+
+// Run the entree function and Engine.WaitForShutdown()
+func Start(entree EntreeFunction) error {
+	return start_with_setting(entree, nil)
 }
 
-func StartSetting(run EntreeFunction, setting Setting) error {
-	return start_with_setting(run, setting)
+func StartSetting(entree EntreeFunction, setting Setting) error {
+	return start_with_setting(entree, setting)
 }
 
 type Setting interface {
