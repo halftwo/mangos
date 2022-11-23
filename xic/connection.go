@@ -625,7 +625,7 @@ func (con *_Connection) handleAnswer(answer *_InAnswer) {
 				tag:  args.GetString("tag"),
 				msg:  args.GetString("mess age")}
 		}
-	} else {
+	} else if res.out != nil {
 		res.err = answer.DecodeArgs(res.out)
 	}
 

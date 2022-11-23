@@ -6,6 +6,8 @@ import (
 	"strings"
 	"os/signal"
 	"sync/atomic"
+
+	"halftwo/mangos/dlog"
 )
 
 func parseArgs() (file string, cfs map[string]string, args []string) {
@@ -81,7 +83,8 @@ func start_with_setting(run EntreeFunction, setting Setting) error {
 	install_additional_signals(engine)
 	err := run(engine, args)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ERROR:", err)
+		dlog.SetOption(dlog.OPT_STDERR)
+		dlog.Log("ERROR", "%s", err.Error())
 		usage()
 		return err
 	}

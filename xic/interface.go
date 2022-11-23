@@ -150,6 +150,7 @@ type Proxy interface {
 
 	// in must be (pointer to) struct or map[string]any
 	// out must be pointer to struct or map[string]any
+	// If out is nil, the answer is discarded
 	Invoke(method string, in, out any) error
 	InvokeCtx(ctx Context, method string, in, out any) error
 
