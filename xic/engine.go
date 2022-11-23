@@ -90,6 +90,13 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 	return engine
 }
 
+func (engine *_Engine) Shutted() bool {
+	engine.mutex.Lock()
+	shutted := (engine.state == eng_SHUTTED)
+	engine.mutex.Unlock()
+	return shutted
+}
+
 func (engine *_Engine) Setting() Setting {
 	return engine.setting
 }
