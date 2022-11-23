@@ -26,10 +26,22 @@ func run(engine xic.Engine, args []string) error {
 	err = prx.Invoke("echo", quest, &answer)
 	fmt.Println(err, answer)
 
-	quest = xic.NewArguments()
-	answer = xic.NewArguments()
-	err = prx.Invoke("time", quest, &answer)
-	fmt.Println(err, answer)
+//	quest = xic.NewArguments()
+//	answer = xic.NewArguments()
+//	err = prx.InvokeAsync("time", quest, &answer)
+//	fmt.Println(err, answer)
+
+	var res xic.Result
+	for i := 0; i < 10000; i++ {
+		quest = xic.NewArguments()
+		answer = xic.NewArguments()
+		res = prx.InvokeAsync("time", quest, &answer)
+		if i % 2000 == 0 {
+			res.Wait()
+		}
+	}
+	res.Wait()
+	fmt.Println(err, res.Out())
 
 	engine.Shutdown()
 	return nil

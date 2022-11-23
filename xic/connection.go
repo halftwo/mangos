@@ -47,6 +47,8 @@ const (
 	con_ERROR
 )
 
+const DEFAULT_CONNECTION_MAXQ = 1000
+
 type _Connection struct {
 	c		net.Conn
 	state		_ConState
@@ -67,6 +69,7 @@ type _Connection struct {
 	mutex           sync.Mutex
 	cond		sync.Cond
 	err             error
+	_str		string
 }
 
 type OutMsgQueue struct {
@@ -94,7 +97,11 @@ func (q *OutMsgQueue) PopFront() _OutMessage {
 }
 
 func _newConnection(engine *_Engine, incoming bool) *_Connection {
-	con := &_Connection{engine: engine, incoming: incoming}
+	con := &_Connection{
+		engine: engine,
+		incoming: incoming,
+		maxQ: DEFAULT_CONNECTION_MAXQ,
+	}
 	con.mq = OutMsgQueue{lst:list.New()}
 	con.cond.L = &con.mutex
 	con.pending = make(map[int64]*_Result)
@@ -138,9 +145,9 @@ func newIncomingConnection(listener *_Listener, c net.Conn) *_Connection {
 	return con
 }
 
-func (con *_Connection) String() string {
-	laddr := con.c.LocalAddr()
-	raddr := con.c.RemoteAddr()
+func netc2str(c net.Conn) string {
+	laddr := c.LocalAddr()
+	raddr := c.RemoteAddr()
 	switch l := laddr.(type) {
 	case *net.TCPAddr:
 		r := raddr.(*net.TCPAddr)
@@ -150,6 +157,16 @@ func (con *_Connection) String() string {
 		return fmt.Sprintf("udp/%s+%d/%s+%d", l.IP.String(), l.Port, r.IP.String(), r.Port)
 	}
 	return fmt.Sprintf("%s/%s/%s", laddr.Network(), laddr.String(), raddr.String())
+}
+
+func (con *_Connection) String() string {
+	con.mutex.Lock()
+	if con._str == "" {
+		con._str = netc2str(con.c)
+	}
+	str := con._str
+	con.mutex.Unlock()
+	return str
 }
 
 func (con *_Connection) IsLive() bool { return con.state <= con_ACTIVE }
@@ -578,7 +595,8 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 		}
 	}
 
-	oneway := false
+	cli_oneway := quest.txid == 0
+	srv_oneway := false
 	var answer *_OutAnswer
 	cur := newCurrent(con, quest)
 	if err == nil {
@@ -591,15 +609,15 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 			}
 
 			fun := mi.method.Func
-			oneway = mi.oneway
-			if oneway {
+			srv_oneway = mi.oneway
+			if srv_oneway {
 				fun.Call([]reflect.Value{reflect.ValueOf(si.Servant), reflect.ValueOf(cur), in})
 			} else {
 				out := makePointerValue(mi.outType)
 				rts := fun.Call([]reflect.Value{reflect.ValueOf(si.Servant), reflect.ValueOf(cur), in, out})
 				if !rts[0].IsNil() {
 					err = rts[0].Interface().(error)
-				} else {
+				} else if !cli_oneway {
 					answer = newOutAnswerNormal(quest.txid, out.Interface())
 				}
 			}
@@ -609,16 +627,24 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 			err = cur.DecodeArgs(&inArgs)
 			if err == nil {
 				err = si.Servant.Xic(cur, inArgs, &outArgs)
-			}
-			if err == nil {
-				answer = newOutAnswerNormal(quest.txid, outArgs)
+				if err == nil {
+					answer = newOutAnswerNormal(quest.txid, outArgs)
+				}
 			}
 		}
 	}
 
-	if quest.txid != 0 {
-		if oneway && err == nil {
-			err = fmt.Errorf("Oneway method invoked as twoway")
+	if cli_oneway {
+		con.numQ.Add(-1)
+		if !srv_oneway {
+			dlog.Log("XIC.WARN", "%s::%s --- Twoway method invoked as oneway", quest.service, quest.method) 
+		}
+		if err != nil {
+			dlog.Log("XIC.WARN", "%s::%s --- %s", quest.service, quest.method, err.Error())
+		}
+	} else {
+		if srv_oneway && err == nil {
+			err = fmt.Errorf("%s::%s --- Oneway method invoked as twoway", quest.service, quest.method)
 		}
 
 		if err != nil {
@@ -628,9 +654,8 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 		}
 
 		con.sendMessage(answer)
-	} else if err != nil {
-		dlog.Log("XIC.WARN", "%s", err.Error())
 	}
+
 	con.engine.numQ.Add(-1)
 }
 
@@ -884,18 +909,16 @@ func (con *_Connection) send_loop() {
 			con.mutex.Lock()
 			msg := con.mq.PopFront()
 			con.mutex.Unlock()
-
 			if msg == nil {
 				break
-			}
-
-			if msg.Type() == AnswerMsgType {
-				con.numQ.Add(-1)
 			}
 
 			err = con.send_msg(msg)
 			if err != nil {
 				goto done
+			}
+			if msg.Type() == AnswerMsgType {
+				con.numQ.Add(-1)
 			}
 		}
 	}
@@ -918,16 +941,25 @@ func (con *_Connection) check_doable(quest *_InQuest) bool {
 			err = NewException(ConnectionOverloadException, "")
 		} else {
 			doit = true
-			engine.numQ.Add(1)
-			con.numQ.Add(1)
 		}
+		engine.numQ.Add(1)
+		con.numQ.Add(1)
 	}
 	con.mutex.Unlock()
 
 	if err != nil {
-		answer := err2OutAnswer(quest, err)
-		con.sendMessage(answer)
+		dlog.Log("XIC.WARN", "%s", err.Error())
+
+		if quest.txid == 0 {
+			con.numQ.Add(-1)
+		} else {
+			answer := err2OutAnswer(quest, err)
+			con.sendMessage(answer)
+		}
+		engine.numQ.Add(-1)
+		return false
 	}
+
 	return doit
 }
 

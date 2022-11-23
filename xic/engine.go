@@ -12,7 +12,7 @@ import (
 	"halftwo/mangos/dlog"
 )
 
-const DEFAULT_MAX_QUEST_NUMBER = 10000
+const DEFAULT_ENGINE_MAXQ = 10000
 
 const (
 	eng_ACTIVE = iota
@@ -52,12 +52,11 @@ func newEngineSetting(setting Setting) *_Engine {
 }
 
 func newEngineSettingName(setting Setting, name string) *_Engine {
-	id := GenerateRandomBase57Id(23)
 	engine := &_Engine{
 		setting: setting,
 		name: name,
-		id: id,
-		maxQ: DEFAULT_MAX_QUEST_NUMBER,
+		id: GenerateRandomBase57Id(23),
+		maxQ: DEFAULT_ENGINE_MAXQ,
 		sigChan: make(chan os.Signal, 1),
 	}
 	engine.cond.L = &engine.mutex
