@@ -214,9 +214,11 @@ func (engine *_Engine) Shutdown() {
 }
 
 func (engine *_Engine) wait_and_close_routine() {
+	exit := false
 	sig := <-engine.shutdownChan
 	if _, ok := sig.(PseudoShutdownSignal); !ok {
-		fmt.Fprintln(os.Stderr, "xic: signal", sig.String(), "received")
+		exit = true
+		fmt.Fprintln(os.Stderr, "XIC: signal", sig.String(), "received")
 	}
 
 	engine.mutex.Lock()
@@ -251,6 +253,11 @@ func (engine *_Engine) wait_and_close_routine() {
 	engine.state = eng_SHUTTED
 	engine.cond.Broadcast()
 	engine.mutex.Unlock()
+
+	if exit {
+		time.Sleep(time.Second)
+		os.Exit(0)
+	}
 }
 
 func (engine *_Engine) WaitForShutdown() {

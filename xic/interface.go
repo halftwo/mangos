@@ -72,7 +72,6 @@ type Engine interface {
 	SetSecretBox(secret *SecretBox)
 	SetShadowBox(secret *ShadowBox)
 
-	Shutted() bool
 	Shutdown()
 	WaitForShutdown()
 }
