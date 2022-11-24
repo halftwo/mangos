@@ -8,8 +8,6 @@ import (
 	"time"
         "errors"
         "math/rand"
-        "hash/crc32"
-        "hash/crc64"
 
 	"halftwo/mangos/xstr"
 	"halftwo/mangos/carp"
@@ -40,8 +38,6 @@ func (lb LoadBalance) String() string {
 	}
 	return ""
 }
-
-var crc64Table = crc64.MakeTable(0x95AC9329AC4BC9B5)
 
 func newProxy(engine *_Engine, proxy string) *_Proxy {
 	sp := xstr.NewSplitter(proxy, "@")
@@ -91,7 +87,7 @@ func newProxy(engine *_Engine, proxy string) *_Proxy {
         if prx.lb == LB_HASH {
 		members := make([]uint64, len(prx.endpoints))
 		for i := 0; i < len(prx.endpoints); i++ {
-			members[i] = crc64.Checksum([]byte(prx.endpoints[i]), crc64Table)
+			members[i] = Crc64Checksum([]byte(prx.endpoints[i]))
 		}
                 prx.cseq = carp.NewCarp(members, nil)
         }
@@ -165,14 +161,14 @@ func (prx *_Proxy) pick_hash(ctx Context) (con *_Connection, err error) {
         var hint uint32
         switch v := xichint.(type) {
         case int64:
-                hint = uint32(v >> 32) ^ uint32(v)
+                hint = uint32(v)
         case string:
-                hint = crc32.ChecksumIEEE([]byte(v))
+                hint = Crc32Checksum([]byte(v))
         case []byte:
-                hint = crc32.ChecksumIEEE(v)
+                hint = Crc32Checksum(v)
         case float32, float64:
                 s := fmt.Sprintf("%.16G", v);
-                hint = crc32.ChecksumIEEE([]byte(s))
+                hint = Crc32Checksum([]byte(s))
 	default:
 		dlog.Log("XIC.WARN", "XIC_HINT invalid in context")
 		return prx.pick_normal()
