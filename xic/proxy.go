@@ -167,7 +167,7 @@ func (prx *_Proxy) pick_hash(ctx Context) (con *_Connection, err error) {
         case []byte:
                 hint = Crc32Checksum(v)
         case float32, float64:
-                s := fmt.Sprintf("%.16G", v);
+                s := fmt.Sprintf("%.8G", v);
                 hint = Crc32Checksum([]byte(s))
 	default:
 		dlog.Log("XIC.WARN", "XIC_HINT invalid in context")
