@@ -17,6 +17,7 @@ const (
 	AdapterAbsentException          = "AdapterAbsentException"
 	ConnectionOverloadException     = "ConnectionOverloadException"
 	EngineOverloadException         = "EngineOverloadException"
+	QuestNotServedException		= "QuestNotServedException"
 	// TODO
 )
 
@@ -30,35 +31,40 @@ type _Exception struct {
 	what string
 }
 
+
 func newEx(name string, code int, tag string, msg string) *_Exception {
 	_, file, line, _ := runtime.Caller(2)
 	ex := &_Exception{name: name, file: file, line: line, code: code, tag: tag, msg: msg}
 	return ex
 }
 
-func NewException(name string, msg string) *_Exception {
+func NewException(name string) *_Exception {
+	return newEx(name, 0, "", "")
+}
+
+func NewEx(name string, msg string) *_Exception {
 	return newEx(name, 0, "", msg)
 }
 
-func NewExceptionCode(name string, code int, msg string) *_Exception {
+func NewExCode(name string, code int, msg string) *_Exception {
 	return newEx(name, code, "", msg)
 }
 
-func NewExceptionCodeTag(name string, code int, tag string, msg string) *_Exception {
+func NewExCodeTag(name string, code int, tag string, msg string) *_Exception {
 	return newEx(name, code, tag, msg)
 }
 
-func NewExceptionf(name string, format string, a ...any) *_Exception {
+func NewExf(name string, format string, a ...any) *_Exception {
 	msg := fmt.Sprintf(format, a...)
 	return newEx(name, 0, "", msg)
 }
 
-func NewExceptionCodef(name string, code int, format string, a ...any) *_Exception {
+func NewExCodef(name string, code int, format string, a ...any) *_Exception {
 	msg := fmt.Sprintf(format, a...)
 	return newEx(name, code, "", msg)
 }
 
-func NewExceptionCodeTagf(name string, code int, tag string, format string, a ...any) *_Exception {
+func NewExTagf(name string, code int, tag string, format string, a ...any) *_Exception {
 	msg := fmt.Sprintf(format, a...)
 	return newEx(name, code, tag, msg)
 }

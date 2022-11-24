@@ -54,6 +54,7 @@ type _Connection struct {
 	state		_ConState
 	engine          *_Engine
 	incoming        bool
+	closed		bool
 	adapter         atomic.Value // Adapter
 	serviceHint     string
 	cipher          *_Cipher
@@ -75,6 +76,11 @@ type _Connection struct {
 type OutMsgQueue struct {
 	lst *list.List
 	num int
+}
+
+func (q *OutMsgQueue) Clear() {
+	q.lst.Init()
+	q.num = 0
 }
 
 func (q *OutMsgQueue) Num() int {
@@ -206,36 +212,43 @@ func (con *_Connection) closeGracefully() {
 }
 
 func (con *_Connection) closeForcefully() {
-	err := NewException(ConnectionClosedException, "")
+	err := NewException(ConnectionClosedException)
 	con.set_error(err)	// TODO
 	con.close_and_reply(false)
 }
 
 func (con *_Connection) close_and_reply(retryable bool) {
 	con.mutex.Lock()
-	netcon := con.c
-	con.c = nil
+	if con.closed {
+		con.mutex.Unlock()
+		return
+	}
+	con.closed = true
+	con.mq.Clear()
 
 	pending := con.pending
 	con.pending = nil
 
 	err := con.err
-	if err == nil {
+	if err == nil && con.state < con_CLOSED {
 		con.state = con_CLOSED
 		con.cond.Broadcast()
 	}
 	con.mutex.Unlock()
 
-	if netcon != nil {
-		netcon.Close()
-	}
+	con.c.Close()
 
-	// TODO: retryable
+	if len(pending) > 0 {
+		if err == nil {
+			// TODO: retryable
+			err = NewException(QuestNotServedException)
+		}
 
-	for _, res := range pending {
-		// TODO
-		res.err = err
-		res.broadcast()
+		for _, res := range pending {
+			// TODO
+			res.err = err
+			res.broadcast()
+		}
 	}
 }
 
@@ -346,7 +359,7 @@ func (con *_Connection) check_send(cmd string, args any) bool {
 func expect_check_msg(msg _Message, cmd string, args any) error {
 	check, ok := msg.(*_InCheck)
 	if !ok || check.cmd != cmd {
-		return NewExceptionf(ProtocolException, "Unexpected cmd of CheckMessage %s", check.cmd)
+		return NewExf(ProtocolException, "Unexpected cmd of CheckMessage %s", check.cmd)
 	}
 	return check.DecodeArgs(args)
 }
@@ -584,13 +597,13 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 	var err error
 	var si *ServantInfo
 	if adapter == nil {
-		err = NewException(AdapterAbsentException, "")
+		err = NewException(AdapterAbsentException)
 	} else {
 		si = adapter.FindServant(quest.service)
 		if si == nil {
 			si := adapter.DefaultServant()
 			if si == nil {
-				err = NewExceptionf(ServiceNotFoundException, "%s", quest.service)
+				err = NewExf(ServiceNotFoundException, "%s", quest.service)
 			}
 		}
 	}
@@ -718,7 +731,7 @@ func checkHeader(header _MessageHeader) error {
 
 func ZZZ(x ...any) {
 	_, file, line, _ := runtime.Caller(1)
-	fmt.Println("XXX", file, line, x)
+	fmt.Println("ZZZ", file, line, x)
 }
 
 func (con *_Connection) _msgDeadline() time.Time {
@@ -875,8 +888,10 @@ func (con *_Connection) send_msg(msg _OutMessage) error {
 func (con *_Connection) sendMessage(msg _OutMessage) {
 	// msg.Type() == AnswerMsgType || msg.Type() == QuestMsgType
 	con.mutex.Lock()
-	con.mq.PushBack(msg)
-	con.cond.Broadcast()
+	if con.state < con_BYE {
+		con.mq.PushBack(msg)
+		con.cond.Broadcast()
+	}
 	con.mutex.Unlock()
 }
 
@@ -936,9 +951,11 @@ func (con *_Connection) check_doable(quest *_InQuest) bool {
 	con.mutex.Lock()
 	if con.state == con_ACTIVE {
 		if con.maxQ > 0 && con.numQ.Load() >= con.maxQ {
-			err = NewException(ConnectionOverloadException, "")
+			err = NewException(ConnectionOverloadException)
+			ZZZ("con.numQ", con.numQ.Load())
 		} else if engine.numQ.Load() >= engine.maxQ {
-			err = NewException(ConnectionOverloadException, "")
+			err = NewException(ConnectionOverloadException)
+			ZZZ("eng.numQ", engine.numQ.Load())
 		} else {
 			doit = true
 		}
@@ -1009,5 +1026,4 @@ done:
 	con.close_and_reply(true)
 }
 
-var ByeMessageException = errors.New("ByeMessageException")
 
