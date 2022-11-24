@@ -236,7 +236,9 @@ func (con *_Connection) close_and_reply(retryable bool) {
 	}
 	con.mutex.Unlock()
 
-	con.c.Close()
+	if con.c != nil {
+		con.c.Close()
+	}
 
 	if len(pending) > 0 {
 		if err == nil {
@@ -952,10 +954,8 @@ func (con *_Connection) check_doable(quest *_InQuest) bool {
 	if con.state == con_ACTIVE {
 		if con.maxQ > 0 && con.numQ.Load() >= con.maxQ {
 			err = NewException(ConnectionOverloadException)
-			ZZZ("con.numQ", con.numQ.Load())
 		} else if engine.numQ.Load() >= engine.maxQ {
 			err = NewException(ConnectionOverloadException)
-			ZZZ("eng.numQ", engine.numQ.Load())
 		} else {
 			doit = true
 		}
@@ -1005,7 +1005,6 @@ func (con *_Connection) process_loop() {
 			con.handleAnswer(answer)
 
 		case ByeMsgType:
-			ZZZ("Bye")
 			con.mutex.Lock()
 			state := con.state
 			if state < con_CLOSED && con.numQ.Load() > 0 {

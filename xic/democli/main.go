@@ -13,7 +13,12 @@ func run(engine xic.Engine, args []string) error {
 	}
 	engine.SetSecretBox(secretBox)
 
-	prx, err := engine.StringToProxy("Demo@tcp++5555")
+	netloc := "Demo@++5555"
+	if len(args) > 1 {
+		netloc = fmt.Sprintf("Demo@+%s+5555", args[1])
+	}
+
+	prx, err := engine.StringToProxy(netloc)
 	if err != nil {
 		return err
 	}
@@ -26,17 +31,17 @@ func run(engine xic.Engine, args []string) error {
 	err = prx.Invoke("echo", quest, &answer)
 	fmt.Println(err, answer)
 
-//	quest = xic.NewArguments()
-//	answer = xic.NewArguments()
-//	err = prx.InvokeAsync("time", quest, &answer)
-//	fmt.Println(err, answer)
+	quest = xic.NewArguments()
+	answer = xic.NewArguments()
+	err = prx.Invoke("time", quest, &answer)
+	fmt.Println(err, answer)
 
 	var res xic.Result
 	for i := 0; i < 10000; i++ {
 		quest = xic.NewArguments()
 		answer = xic.NewArguments()
 		res = prx.InvokeAsync("time", quest, &answer)
-		if i % 2000 == 0 {
+		if i % 500 == 0 {
 			res.Wait()
 		}
 	}
