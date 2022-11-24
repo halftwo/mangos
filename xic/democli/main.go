@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"halftwo/mangos/xic"
 )
@@ -14,8 +15,12 @@ func run(engine xic.Engine, args []string) error {
 	engine.SetSecretBox(secretBox)
 
 	netloc := "Demo@++5555"
+	num := 10000
 	if len(args) > 1 {
 		netloc = fmt.Sprintf("Demo@+%s+5555", args[1])
+		if len(args) > 2 {
+			num, err = strconv.Atoi(args[2])
+		}
 	}
 
 	prx, err := engine.StringToProxy(netloc)
@@ -37,7 +42,7 @@ func run(engine xic.Engine, args []string) error {
 	fmt.Println(err, answer)
 
 	var res xic.Result
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < num; i++ {
 		quest = xic.NewArguments()
 		answer = xic.NewArguments()
 		res = prx.InvokeAsync("time", quest, &answer)
