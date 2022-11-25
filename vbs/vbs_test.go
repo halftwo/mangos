@@ -7,6 +7,19 @@ import (
 	"fmt"
 )
 
+
+func empty_equal(t1 any, t2 any) bool {
+	x1 := reflect.ValueOf(t1)
+	x2 := reflect.ValueOf(t2)
+	if x1.Kind() != x2.Kind() {
+		return false
+	}
+	if x1.Len() != x2.Len() {
+		return false
+	}
+	return true
+}
+
 func testMarshal(t *testing.T, u any) {
 	got, err := Marshal(u)
 	if err != nil {
@@ -22,7 +35,7 @@ func testMarshal(t *testing.T, u any) {
 	}
 
 	v := pv.Elem().Interface()
-	if !reflect.DeepEqual(u, v) {
+	if !reflect.DeepEqual(u, v) && !empty_equal(u, v) {
 		fmt.Println(u)
 		fmt.Println(v)
 		t.Fatal("The unmarshaled data does not match the original")
@@ -43,11 +56,23 @@ func benchmark(b *testing.B, u any) {
 	}
 
 	v := pv.Elem().Interface()
-	if !reflect.DeepEqual(u, v) {
+	if !reflect.DeepEqual(u, v) && !empty_equal(u, v) {
 		fmt.Println(u)
 		fmt.Println(v)
 		b.Fatalf("The unmarshaled data does not match the original")
 	}
+}
+
+func TestNil(t *testing.T) {
+	defer func() {
+		if x := recover(); x != nil {
+			fmt.Printf("panic: %v\n", x)
+		}
+	}()
+
+	var x any
+	z, err := Marshal(x)
+	fmt.Println(z, err)
 }
 
 func TestMarshalFloat(t *testing.T) {

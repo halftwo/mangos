@@ -133,7 +133,7 @@ type Encoder struct {
 	maxDepth int16
 	depth int16
 	err error
-	bytes []byte
+	buffer []byte
 }
 
 // NewEncoder returns a new Encoder that writes to w
@@ -160,14 +160,13 @@ func (enc *Encoder) SetMaxDepth(depth int) {
 	}
 }
 
-// Encode writes the VBS encoding of v to the Encoder
+// Encode writes the VBS encoding of data to the Encoder
 func (enc *Encoder) Encode(data any) error {
 	if data == nil {
-		enc.encodeNil()
-	} else {
-		v := reflect.ValueOf(data)
-		enc.encodeReflectValue(v)
+		panic("No data given")
 	}
+	v := reflect.ValueOf(data)
+	enc.encodeReflectValue(v)
 	return enc.err
 }
 
@@ -319,18 +318,13 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 			buf = v.Slice(0, v.Len()).Interface().([]byte)
 		} else {
 			n := v.Len()
-			if cap(enc.bytes) < n {
-				enc.bytes = make([]byte, n)
+			if cap(enc.buffer) < n {
+				enc.buffer = make([]byte, n)
 			}
-			buf = enc.bytes[:n]
+			buf = enc.buffer[:n]
 			reflect.Copy(reflect.ValueOf(buf), v)
 		}
 		enc.encodeBlob(buf)
-		return
-	}
-
-	if isSlice && v.IsNil() {
-		enc.encodeNil()
 		return
 	}
 
@@ -355,11 +349,6 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 }
 
 func (enc *Encoder) encodeMap(v reflect.Value) {
-	if v.IsNil() {
-		enc.encodeNil()
-		return
-	}
-
 	enc.depth++
 	if enc.depth > enc.maxDepth {
 		enc.err = xerr.Trace(&DepthOverflowError{enc.maxDepth})
