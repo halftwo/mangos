@@ -15,6 +15,6 @@ xic.rlimit.nofile = 2000
 xic.sample.server = 1
 xic.sample.client = 1
 
-xic.passport.shadow = shadow.demo
+#xic.passport.shadow = shadow.demo
 xic.passport.secret = secret.demo
 

@@ -308,21 +308,6 @@ func (con *_Connection) invoke(prx *_Proxy, q *_OutQuest, res *_Result) {
 	}
 }
 
-func makePointerValue(t reflect.Type) reflect.Value {
-	var p reflect.Value
-	if t.Kind() == reflect.Pointer {
-		p = reflect.New(t.Elem())
-	} else {
-		p = reflect.New(t)
-	}
-
-	elem := p.Elem()
-	if elem.Kind() == reflect.Map {
-		elem.Set(reflect.MakeMap(elem.Type()))
-	}
-	return p
-}
-
 type _ForbiddenArgs struct {
 	Reason string `vbs:"reason"`
 }
@@ -595,60 +580,90 @@ func err2OutAnswer(quest *_InQuest, err error) *_OutAnswer {
 	return answer
 }
 
+func makePointerValue(t reflect.Type) reflect.Value {
+	var p reflect.Value
+	if t.Kind() == reflect.Pointer {
+		p = reflect.New(t.Elem())
+	} else {
+		p = reflect.New(t)
+	}
+
+	elem := p.Elem()
+	if elem.Kind() == reflect.Map {
+		elem.Set(reflect.MakeMap(elem.Type()))
+	}
+	return p
+}
+
 func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 	var err error
+	var answer *_OutAnswer
 	var si *ServantInfo
+
+	cli_oneway := quest.txid == 0
+	srv_oneway := false
+
 	if adapter == nil {
 		err = NewException(AdapterAbsentException)
+		goto wrong
 	} else {
 		si = adapter.FindServant(quest.service)
 		if si == nil {
 			si := adapter.DefaultServant()
 			if si == nil {
 				err = NewExf(ServiceNotFoundException, "%s", quest.service)
+				goto wrong
 			}
 		}
 	}
 
-	cli_oneway := quest.txid == 0
-	srv_oneway := false
-	var answer *_OutAnswer
-	cur := newCurrent(con, quest)
-	if err == nil {
-		mi, ok := si.methods[quest.method]
-		if ok {
-			in := makePointerValue(mi.inType)
-			err = cur.DecodeArgs(in.Interface())
-			if mi.inType.Kind() != reflect.Pointer {
-				in = in.Elem()
-			}
+	if mi, ok := si.Methods[quest.method]; ok {
+		srv_oneway = mi.Oneway
+		in := makePointerValue(mi.InType)
+		err = quest.DecodeArgs(in.Interface())
+		if err != nil {
+			goto wrong
+		}
 
-			fun := mi.method.Func
-			srv_oneway = mi.oneway
-			if srv_oneway {
-				fun.Call([]reflect.Value{reflect.ValueOf(si.Servant), reflect.ValueOf(cur), in})
-			} else {
-				out := makePointerValue(mi.outType)
-				rts := fun.Call([]reflect.Value{reflect.ValueOf(si.Servant), reflect.ValueOf(cur), in, out})
-				if !rts[0].IsNil() {
-					err = rts[0].Interface().(error)
-				} else if !cli_oneway {
-					answer = newOutAnswerNormal(quest.txid, out.Interface())
-				}
-			}
+		if mi.InType.Kind() != reflect.Pointer {
+			in = in.Elem()
+		}
+
+		cur := newCurrent(con, quest)
+		if srv_oneway {
+			mi.Method.Func.Call([]reflect.Value{reflect.ValueOf(si.Servant), reflect.ValueOf(cur), in})
 		} else {
-			var inArgs Arguments
-			var outArgs Arguments
-			err = cur.DecodeArgs(&inArgs)
-			if err == nil {
-				err = si.Servant.Xic(cur, inArgs, &outArgs)
-				if err == nil {
-					answer = newOutAnswerNormal(quest.txid, outArgs)
-				}
+			out := makePointerValue(mi.OutType)
+			if mi.OutType.Kind() != reflect.Pointer {
+				out = out.Elem()
 			}
+			rts := mi.Method.Func.Call([]reflect.Value{reflect.ValueOf(si.Servant), reflect.ValueOf(cur), in, out})
+			if !rts[0].IsNil() {
+				err = rts[0].Interface().(error)
+				goto wrong
+			}
+			if cli_oneway {
+				goto wrong
+			}
+			answer = newOutAnswerNormal(quest.txid, out.Interface())
 		}
+	} else {
+		inArgs := Arguments{}
+		err = quest.DecodeArgs(inArgs)
+		if err != nil {
+			goto wrong
+		}
+
+		cur := newCurrent(con, quest)
+		outArgs := Arguments{}
+		err = si.Servant.Xic(cur, inArgs, outArgs)
+		if err != nil {
+			goto wrong
+		}
+		answer = newOutAnswerNormal(quest.txid, outArgs)
 	}
 
+wrong:
 	if cli_oneway {
 		con.numQ.Add(-1)
 		if !srv_oneway {

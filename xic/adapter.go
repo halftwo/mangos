@@ -151,6 +151,14 @@ func (adp *_Adapter) AddServant(service string, servant Servant) (Proxy, error) 
 	return prx, nil
 }
 
+func (adp *_Adapter) MustAddServant(service string, servant Servant) Proxy {
+	prx, err := adp.AddServant(service, servant)
+	if err != nil {
+		panic(err)
+	}
+	return prx
+}
+
 func (adp *_Adapter) RemoveServant(service string) {
 	adp.srvMap.Delete(service)
 }

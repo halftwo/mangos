@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"errors"
 )
 
 type DefaultServant struct {
 }
 
-func (s DefaultServant) Xic(cur Current, in Arguments, out *Arguments) error {
+func (s DefaultServant) Xic(cur Current, in Arguments, out Arguments) error {
 	return NewExf(MethodNotFoundException, "Method \"%s\" not found in service \"%s\"", cur.Method(), cur.Service())
 }
 
@@ -19,31 +20,48 @@ func getServantInfo(name string, servant Servant) (*ServantInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	svc.methods = mt
+	svc.Methods = mt
 	return svc, nil
 }
 
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
 
-func isValidArgs(x reflect.Type) bool {
-	kind := x.Kind()
-	if kind == reflect.Struct {
+func IsValidInType(t reflect.Type) bool {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Struct:
 		return true
+	case reflect.Map:
+		if t.Key().Kind() == reflect.String {
+			return true
+		}
 	}
-
-	if kind != reflect.Map {
-		return false
-	}
-
-	if x.Key().Kind() != reflect.String {
-		return false
-	}
-	return true
+	return false
 }
 
-func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
-	mt := map[string]*MethodInfo{}
+func IsValidOutType(t reflect.Type) bool {
+	is_ptr := false
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+		is_ptr = true
+	}
+
+	switch t.Kind() {
+	case reflect.Struct:
+		return is_ptr
+	case reflect.Map:
+		if t.Key().Kind() == reflect.String {
+			return true
+		}
+	}
+	return false
+}
+
+func getMethodTable(servant Servant) (map[string]MethodInfo, error) {
 	v := reflect.TypeOf(servant)
+	mt := make(map[string]MethodInfo, v.NumMethod())
 	for i := 0; i < v.NumMethod(); i++ {
 		m := v.Method(i)
 		if !strings.HasPrefix(m.Name, "Xic_") {
@@ -60,39 +78,29 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 		}
 
 		cur := m.Type.In(1)
-		if cur.Name() != "Current" && cur.PkgPath() != "halftwo/mangos/xic" {
+		if cur.Name() != "Current" && cur.PkgPath() != "halftwo/mangos/xic" {	// TODO
 			return nil, fmt.Errorf("The first argument must be of type xic.Current instead of %s", cur.Name())
 		}
 
-		mi := &MethodInfo{}
-		mi.method = m
-		mi.name = m.Name[4:]
+		mi := MethodInfo{}
+		mi.Method = m
+		mi.Name = m.Name[4:]
 
-		mi.inType = m.Type.In(2)
-		in := mi.inType
-		if mi.inType.Kind() == reflect.Pointer {
-			in = mi.inType.Elem()
-		}
-
-		if !isValidArgs(in) {
-			return nil, fmt.Errorf("The 2nd argument has invalid type %v", mi.inType)
+		mi.InType = m.Type.In(2)
+		if !IsValidInType(mi.InType) {
+			return nil, errors.New("Argument in of xic method must be a (pointer to) map[string]any or a (pointer to) struct")
 		}
 
 		if m.Type.NumIn() == 3 {
-			mi.oneway = true
+			mi.Oneway = true
 		} else {
-			mi.outType = m.Type.In(3)
-			if mi.outType.Kind() != reflect.Pointer {
-				return nil, fmt.Errorf("The 3rd argument must be a pointer to struct or to map[string]any")
-			}
-
-			out := mi.outType.Elem()
-			if !isValidArgs(out) {
-				return nil, fmt.Errorf("The 3nd argument has invalid type %v", mi.outType)
+			mi.OutType = m.Type.In(3)
+			if !IsValidOutType(mi.OutType) {
+				return nil, errors.New("Argument out of xic method must be a (pointer to) map[string]any or a pointer to struct")
 			}
 		}
 
-		mt[mi.name] = mi
+		mt[mi.Name] = mi
 	}
 	return mt, nil
 }

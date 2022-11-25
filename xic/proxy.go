@@ -264,47 +264,17 @@ func (r *_Result) broadcast() {
 
 func assert_valid_in(in any) {
 	if in != nil {
-		v := reflect.ValueOf(in)
-		for v.Kind() == reflect.Pointer {
-			v = v.Elem()
-		}
-		valid := false
-		switch v.Kind() {
-		case reflect.Struct:
-			valid = true
-		case reflect.Map:
-			t := v.Type()
-			if t.Key().Kind() == reflect.String {
-				valid = true
-			}
-		}
-		if !valid {
-			panic("Argument in of xic.Proxy.Invoke() must be a map[string]* or a (pointer to) struct")
+		if !IsValidInType(reflect.TypeOf(in)) {
+			panic("Argument in of xic method must be a (pointer to) map[string]* or a (pointer to) struct")
 		}
 	}
 }
 
+
 func assert_valid_out(out any) {
 	if out != nil {
-		out_is_ptr := false
-		v := reflect.ValueOf(out)
-		if v.Kind() == reflect.Pointer {
-			v = v.Elem()
-			out_is_ptr = true
-		}
-
-		valid := false
-		switch v.Kind() {
-		case reflect.Struct:
-			valid = out_is_ptr
-		case reflect.Map:
-			t := v.Type()
-			if t.Key().Kind() == reflect.String {
-				valid = true
-			}
-		}
-		if !valid {
-			panic("Argument out of xic.Proxy.Invoke() must be a map[string]* or a pointer to struct")
+		if !IsValidOutType(reflect.TypeOf(out)) {
+			panic("Argument out of xic method must be a (pointer to) map[string]* or a pointer to struct")
 		}
 	}
 }

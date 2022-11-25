@@ -22,7 +22,7 @@ func newServant(adapter xic.Adapter) *_DemoServant {
 	return srv
 }
 
-func (srv *_DemoServant) Xic_echo(cur xic.Current, in xic.Arguments, out *xic.Arguments) error {
+func (srv *_DemoServant) Xic_echo(cur xic.Current, in xic.Arguments, out xic.Arguments) error {
 	out.CopyFrom(in)
 	return nil
 }
@@ -64,10 +64,7 @@ func run(engine xic.Engine, args []string) error {
 	}
 
 	servant := newServant(adapter)
-	_, err = adapter.AddServant("Demo", servant)
-	if err != nil {
-		return err
-	}
+	adapter.MustAddServant("Demo", servant)
 	adapter.Activate()
 	return nil
 }

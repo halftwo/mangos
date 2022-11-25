@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"halftwo/mangos/xic"
 )
@@ -45,9 +46,9 @@ func run(engine xic.Engine, args []string) error {
 		Strftime map[string]string `vbs:"strftime"`
 		Time int `vbs:"time"`
 	}
-	var timeans TimeAnswer
-	err = prx.Invoke("time", nil, &timeans)
-	fmt.Println(err, timeans)
+	answer := xic.NewArguments()
+	err = prx.Invoke("time", nil, answer)
+	fmt.Println(err, answer)
 
 	var res xic.Result
 	for i := 0; i < num; i++ {
@@ -65,6 +66,8 @@ func run(engine xic.Engine, args []string) error {
 }
 
 func main() {
+	start := time.Now()
 	xic.Start(run)
+	fmt.Println("Time elapsed:", float32(time.Now().Sub(start))/float32(time.Second))
 }
 

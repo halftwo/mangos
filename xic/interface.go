@@ -94,17 +94,17 @@ type Engine interface {
 }
 
 type MethodInfo struct {
-	name    string
-	method  reflect.Method
-	oneway  bool
-	inType  reflect.Type
-	outType reflect.Type
+	Name    string
+	Method  reflect.Method
+	Oneway  bool
+	InType  reflect.Type
+	OutType reflect.Type
 }
 
 type ServantInfo struct {
 	Service string
 	Servant Servant
-	methods map[string]*MethodInfo
+	Methods map[string]MethodInfo
 }
 
 type Adapter interface {
@@ -116,7 +116,9 @@ type Adapter interface {
 	Deactivate() error
 
 	AddServant(service string, servant Servant) (Proxy, error)
+	MustAddServant(service string, servant Servant) Proxy
 	RemoveServant(service string)
+
 	FindServant(service string) *ServantInfo
 
 	DefaultServant() *ServantInfo
@@ -133,13 +135,15 @@ type Current interface {
 
 type Servant interface {
 	/*
-	   Twoway method
-	   Xic_xyz(cur Current, in *ArgsIn, out *ArgsOut) error
+	   Argument in must be a (pointer to) map[string]any or a (pointer to) struct
+	   Argument out must be a (pointer to) map[string]any or a pointer to struct
 
-	   Oneway method
-	   Xic_xyz(cur Current, in *ArgsIn) error
+	   Twoway method:
+		   Xic_abc(cur Current, in *ArgsIn, out *ArgsOut) error
+	   Oneway method:
+		   Xic_abc(cur Current, in *ArgsIn) error
 	*/
-	Xic(cur Current, in Arguments, out *Arguments) error
+	Xic(cur Current, in Arguments, out Arguments) error
 }
 
 type LoadBalance int
