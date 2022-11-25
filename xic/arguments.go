@@ -20,7 +20,7 @@ func (args Arguments) CopyFrom(rhs any) error {
 
 func (args Arguments) CopyTo(x any) error {
 	v := reflect.ValueOf(x)
-	if v.Kind() != reflect.Ptr || v.IsNil() {
+	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return fmt.Errorf("The parameter shoud be pointer to struct or map[string]any")
 	}
 
@@ -122,7 +122,7 @@ func (args Arguments) GetBlobDefault(name string, dft []byte) []byte {
 
 func (args Arguments) checkInterface(name string, kind reflect.Kind, p any) (any, reflect.Value, error) {
 	x := reflect.ValueOf(p)
-	if x.Kind() != reflect.Ptr || x.IsNil() || x.Elem().Kind() != kind {
+	if x.Kind() != reflect.Pointer || x.IsNil() || x.Elem().Kind() != kind {
 		return nil, reflect.Value{}, fmt.Errorf("The second parameter should be pointer to %v", kind)
 	}
 
@@ -190,7 +190,7 @@ func (args Arguments) GetStruct(name string, p any) error {
 
 func (args Arguments) SetArgStruct(p any) error {
 	x := reflect.ValueOf(p)
-	if x.Kind() == reflect.Ptr {
+	if x.Kind() == reflect.Pointer {
 		if !x.IsNil() {
 			x = x.Elem()
 		}
@@ -218,7 +218,7 @@ func (args Arguments) SetArgStruct(p any) error {
 
 func (args Arguments) ArgStruct(p any) error {
 	x := reflect.ValueOf(p)
-	if x.Kind() != reflect.Ptr || x.IsNil() || x.Elem().Kind() != reflect.Struct {
+	if x.Kind() != reflect.Pointer || x.IsNil() || x.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("The parameter should be pointer to struct")
 	}
 	x = x.Elem()
@@ -487,14 +487,14 @@ func assignStructFromMap(lhs, rhs reflect.Value) error {
 }
 
 func dereference(v reflect.Value) (reflect.Value, error) {
-	if v.Kind() != reflect.Ptr && v.Kind() != reflect.Interface {
+	if v.Kind() != reflect.Pointer && v.Kind() != reflect.Interface {
 		return v, nil
 	}
 
 	for v.IsValid() {
 		elem := v.Elem()
 		k := elem.Kind()
-		if k != reflect.Ptr && k != reflect.Interface {
+		if k != reflect.Pointer && k != reflect.Interface {
 			break
 		}
 		v = elem
@@ -519,7 +519,7 @@ func assignValue(lhs, rhs reflect.Value) error {
 
 	var err error
 	k := rhs.Kind()
-	if k == reflect.Ptr || k == reflect.Interface {
+	if k == reflect.Pointer || k == reflect.Interface {
 		rhs, err = dereference(rhs)
 		if err != nil {
 			return err
@@ -553,7 +553,7 @@ func assignValue(lhs, rhs reflect.Value) error {
 		} else {
 			err = fmt.Errorf("lhs of assignment can't be non-empty interface")
 		}
-	case reflect.Ptr:
+	case reflect.Pointer:
 		err = fmt.Errorf("lhs of assignment can't be pointer")
 	default:
 		err = fmt.Errorf("lhs of assignment can't be %v", lk)
@@ -592,7 +592,7 @@ func (args Arguments) Set(name string, x any) error {
 	case reflect.Struct:
 		x = structToMap(v)
 
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		v, err := dereference(v)
 		if err != nil {
 			return err

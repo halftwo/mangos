@@ -117,7 +117,7 @@ func (bp *BytesPacker) PackDecimal64(n *int, v Decimal64) {
 }
 
 // Marshal returns the VBS encoding of v.
-func Marshal(data interface{}) ([]byte, error) {
+func Marshal(data any) ([]byte, error) {
 	buf := bytes.NewBuffer([]byte{})
 	enc := NewEncoder(buf)
 	enc.Encode(data)
@@ -161,7 +161,7 @@ func (enc *Encoder) SetMaxDepth(depth int) {
 }
 
 // Encode writes the VBS encoding of v to the Encoder
-func (enc *Encoder) Encode(data interface{}) error {
+func (enc *Encoder) Encode(data any) error {
 	if data == nil {
 		enc.encodeNil()
 	} else {
@@ -245,7 +245,7 @@ func (enc *Encoder) encodeReflectValue(v reflect.Value) {
 	case reflect.Struct:
 		enc.encodeStruct(v)
 
-	case reflect.Interface, reflect.Ptr:
+	case reflect.Interface, reflect.Pointer:
 		if v.IsNil() {
 			enc.encodeNil()
 		} else {

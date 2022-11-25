@@ -195,13 +195,13 @@ func (o *_ValueSeqs) Swap(i, j int) {
 	o.items[i], o.items[j] = o.items[j], o.items[i]
 }
 
-func (o *_ValueSeqs) Push(x interface{}) {
+func (o *_ValueSeqs) Push(x any) {
 	z := x.(_VsItem)
 	o.items[o.n] = z
 	o.n++
 }
 
-func (o *_ValueSeqs) Pop() interface{} {
+func (o *_ValueSeqs) Pop() any {
 	o.n--
 	return o.items[o.n]
 }

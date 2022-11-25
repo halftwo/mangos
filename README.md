@@ -9,4 +9,6 @@ crock32 -- a base32 encoding using an alphabet specified by Douglas Crockford in
 
 vbs -- see https://github.com/halftwo/knotty/blob/master/xslib/vbs.rst
 
+xic -- an RPC framework
+
 and more

@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-func testMarshal(t *testing.T, u interface{}) {
+func testMarshal(t *testing.T, u any) {
 	got, err := Marshal(u)
 	if err != nil {
 		t.Fatalf("error encoding %T: %v:", u, err)
@@ -29,7 +29,7 @@ func testMarshal(t *testing.T, u interface{}) {
 	}
 }
 
-func benchmark(b *testing.B, u interface{}) {
+func benchmark(b *testing.B, u any) {
 	buf := &bytes.Buffer{}
 	enc := NewEncoder(buf)
 	dec := NewDecoder(buf)
@@ -141,13 +141,13 @@ func BenchmarkStructIntKey(b *testing.B) {
 	benchmark(b, st2)
 }
 
-func testUnmarshalInterface(t *testing.T, u interface{}) {
+func testUnmarshalInterface(t *testing.T, u any) {
 	got, err := Marshal(u)
 	if err != nil {
 		t.Fatalf("error encoding %T: %v:", u, err)
 	}
 
-	var v interface{}
+	var v any
 	err = Unmarshal(got, &v)
 	if err != nil {
 		t.Fatalf("error decoding %T: %v:", u, err)
@@ -162,13 +162,13 @@ func TestUnmarshalInterface(t *testing.T) {
 	u2 := []int{1,2,3}
 	testUnmarshalInterface(t, u2)
 
-	u3 := []interface{}{666, "hello", "world", 0.999}
+	u3 := []any{666, "hello", "world", 0.999}
 	testUnmarshalInterface(t, u3)
 
 	u4 := map[int]string{1:"hello", 5:"world", -2:"faint"}
 	testUnmarshalInterface(t, u4)
 
-	u5 := map[string]interface{}{"hello":1.25, "world":"ok", "faint":123456789}
+	u5 := map[string]any{"hello":1.25, "world":"ok", "faint":123456789}
 	testUnmarshalInterface(t, u5)
 }
 

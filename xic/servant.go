@@ -70,7 +70,7 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 
 		mi.inType = m.Type.In(2)
 		in := mi.inType
-		if mi.inType.Kind() == reflect.Ptr {
+		if mi.inType.Kind() == reflect.Pointer {
 			in = mi.inType.Elem()
 		}
 
@@ -82,7 +82,7 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 			mi.oneway = true
 		} else {
 			mi.outType = m.Type.In(3)
-			if mi.outType.Kind() != reflect.Ptr {
+			if mi.outType.Kind() != reflect.Pointer {
 				return nil, fmt.Errorf("The 3rd argument must be a pointer to struct or to map[string]any")
 			}
 

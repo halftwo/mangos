@@ -35,7 +35,7 @@ func (e *InvalidUnmarshalError) Error() string {
 		return "vbs: Unmarshal(nil)"
 	}
 
-	if e.Type.Kind() != reflect.Ptr {
+	if e.Type.Kind() != reflect.Pointer {
 		return "vbs: Unmarshal(non-pointer " + e.Type.String() + ")"
 	}
 	return "vbs: Unmarshal(nil " + e.Type.String() + ")"

@@ -43,7 +43,7 @@ type _RecordMan struct {
 }
 
 var recPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		pid := uint32(os.Getpid())
 		r := new(_RecordMan)
 		r.pid = pid
@@ -231,7 +231,7 @@ func TimeString(t time.Time) string {
 // Log send a dlog to dlogd. 
 // identity is from the logger's default.
 // locus is from runtime.Caller()
-func (lg *Dlogger) Log(tag string, format string, a ...interface{}) {
+func (lg *Dlogger) Log(tag string, format string, a ...any) {
 	var locus string
 	if lg == theLogger {
 		locus = getLocus(2)
@@ -248,7 +248,7 @@ func (lg *Dlogger) printStderr(rec *_RecordMan) {
 
 // XLog send a dlog to dlogd. 
 // identity and locus are also specified in the arguments.
-func (lg *Dlogger) XLog(identity string, tag string, locus string, format string, a ...interface{}) {
+func (lg *Dlogger) XLog(identity string, tag string, locus string, format string, a ...any) {
 	rec := recPool.Get().(*_RecordMan)
 	defer recPool.Put(rec)
 
@@ -333,11 +333,11 @@ func SetOption(option int) {
 	theLogger.SetOption(option)
 }
 
-func Log(tag string, format string, a ...interface{}) {
+func Log(tag string, format string, a ...any) {
 	theLogger.Log(tag, format, a...)
 }
 
-func XLog(identity string, tag string, locus string, format string, a ...interface{}) {
+func XLog(identity string, tag string, locus string, format string, a ...any) {
 	theLogger.XLog(identity, tag, locus, format, a...)
 }
 

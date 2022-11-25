@@ -33,7 +33,7 @@ func run(engine xic.Engine, args []string) error {
 	quest.Set("world", "All men are created equal")
 
 	answer := xic.NewArguments()
-	err = prx.Invoke("echo", quest, &answer)
+	err = prx.Invoke("echo", quest, answer)
 	fmt.Println(err, answer)
 
 	quest = xic.NewArguments()
@@ -45,7 +45,7 @@ func run(engine xic.Engine, args []string) error {
 	for i := 0; i < num; i++ {
 		quest = xic.NewArguments()
 		answer = xic.NewArguments()
-		res = prx.InvokeAsync("time", quest, &answer)
+		res = prx.InvokeAsync("time", quest, answer)
 		if i % 500 == 0 {
 			res.Wait()
 		}

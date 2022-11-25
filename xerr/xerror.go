@@ -6,17 +6,17 @@ import (
 	"runtime"
 )
 
-func Trace(cause interface{}, args ...interface{}) Xerror {
+func Trace(cause any, args ...any) Xerror {
 	msg := fmt.Sprint(args...)
 	return doTrace(cause, msg)
 }
 
-func Tracef(cause interface{}, format string, args ...interface{}) Xerror {
+func Tracef(cause any, format string, args ...any) Xerror {
 	msg := fmt.Sprintf(format, args...)
 	return doTrace(cause, msg)
 }
 
-func doTrace(cause interface{}, msg string) Xerror {
+func doTrace(cause any, msg string) Xerror {
 	err, ok := cause.(*_Xerror)
 	if !ok {
 		err = newXerror(cause)
@@ -27,17 +27,17 @@ func doTrace(cause interface{}, msg string) Xerror {
 
 type Xerror interface {
 	Error() string
-	Cause() interface{}
+	Cause() any
 }
 
 type _Xerror struct {
-	cause       interface{}
+	cause       any
 	stacktrace []uintptr      // first stack trace
 	msgtrace   []_TraceItem   // all messages traced
 }
 
 
-func newXerror(cause interface{}) *_Xerror {
+func newXerror(cause any) *_Xerror {
 	return &_Xerror{cause:cause}
 }
 
@@ -48,7 +48,7 @@ func (err *_Xerror) Error() string {
 // Return the "cause" of this error.
 // Cause could be used for error handling/switching,
 // or for holding general error/debug information.
-func (err *_Xerror) Cause() interface{} {
+func (err *_Xerror) Cause() any {
 	return err.cause
 }
 

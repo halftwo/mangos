@@ -109,7 +109,7 @@ func (dec *Decoder) unreadByte() {
 
 // Unmarshal decodes the VBS-encoded data and stores the result in the value pointed to by v.
 // If v is nil or not a pointer, Unmarshal returns an InvalidUnmarshalError.
-func Unmarshal(buf []byte, v interface{}) error {
+func Unmarshal(buf []byte, v any) error {
 	rest, err := UnmarshalOneItem(buf, v)
 	if err != nil {
 		return err
@@ -120,7 +120,7 @@ func Unmarshal(buf []byte, v interface{}) error {
 	return nil
 }
 
-func UnmarshalOneItem(buf []byte, v interface{}) (rest []byte, err error) {
+func UnmarshalOneItem(buf []byte, v any) (rest []byte, err error) {
 	dec := NewDecoderBytes(buf)
 	dec.Decode(v)
 	b := dec.r.(*bytes.Buffer)
@@ -175,13 +175,19 @@ func (dec *Decoder) SetMaxStringLength(length int) {
 }
 
 // Decode reads the next VBS-encoded value from its input and stores it in the value pointed to by v.
-func (dec *Decoder) Decode(data interface{}) error {
+func (dec *Decoder) Decode(data any) error {
 	v := reflect.ValueOf(data)
-	if v.Kind() != reflect.Ptr || v.IsNil() {
-		dec.err = xerr.Trace(&InvalidUnmarshalError{v.Type()})
-		return dec.err
+	if v.IsNil() {
+		panic("Data must be a map or a pointer, and not nil.")
 	}
-	dec.decodeReflectValue(v.Elem())
+	switch v.Kind() {
+	case reflect.Pointer:
+		dec.decodeReflectValue(v.Elem())
+	case reflect.Map:
+		dec.decodeReflectValue(v)
+	default:
+		dec.err = xerr.Trace(&InvalidUnmarshalError{v.Type()})
+	}
 	return dec.err
 }
 
@@ -290,17 +296,17 @@ func (dec *Decoder) decodeReflectValue(v reflect.Value) {
 	case reflect.Struct:
 		decode = (*Decoder).decodeStructValue
 
-	case reflect.Interface, reflect.Ptr:
+	case reflect.Interface, reflect.Pointer:
 		for v.IsValid() {
 			elem := v.Elem()
-			k := elem.Kind()
-			if k != reflect.Ptr && k != reflect.Interface {
+			ek := elem.Kind()
+			if ek != reflect.Pointer && ek != reflect.Interface {
 				break
 			}
 			v = elem
 		}
 
-		if v.Kind() == reflect.Ptr {
+		if v.Kind() == reflect.Pointer {
 			if v.IsNil() {
 				p := reflect.New(v.Type().Elem())
 				v.Set(p)
@@ -851,7 +857,7 @@ func (dec *Decoder) decodeStructValue(v reflect.Value) {
 	}
 }
 
-func (dec *Decoder) decodeInterface() (x interface{}) {
+func (dec *Decoder) decodeInterface() (x any) {
 	head := dec.unpackHead()
 	if dec.err != nil {
 		return
@@ -904,14 +910,14 @@ func (dec *Decoder) decodeInterface() (x interface{}) {
 	return
 }
 
-func (dec *Decoder) decodeInterfaceSlice() (r interface{}) {
+func (dec *Decoder) decodeInterfaceSlice() (r any) {
 	dec.depth++
 	if dec.depth > dec.maxDepth {
 		dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
 		return
 	}
 
-	s := make([]interface{}, 0)
+	s := make([]any, 0)
 	for i := 0; dec.err == nil; i++ {
 		if dec.unpackIfTail() {
 			break
@@ -928,15 +934,15 @@ func (dec *Decoder) decodeInterfaceSlice() (r interface{}) {
 	return
 }
 
-func (dec *Decoder) decodeInterfaceMap() (r interface{}) {
+func (dec *Decoder) decodeInterfaceMap() (r any) {
 	dec.depth++
 	if dec.depth > dec.maxDepth {
 		dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
 		return
 	}
 
-	var mi map[int64]interface{}
-	var ms map[string]interface{}
+	var mi map[int64]any
+	var ms map[string]any
 
 	kind := reflect.Invalid
 	for dec.err == nil {
@@ -955,10 +961,10 @@ func (dec *Decoder) decodeInterfaceMap() (r interface{}) {
 			kind = kk.Kind()
 			switch kind {
 			case reflect.Int64:
-				mi = make(map[int64]interface{})
+				mi = make(map[int64]any)
 				r = mi
 			case reflect.String:
-				ms = make(map[string]interface{})
+				ms = make(map[string]any)
 				r = ms
 			case reflect.Bool, reflect.Float64, reflect.Slice, reflect.Map:
 				dec.err = xerr.Trace(&InvalidUnmarshalError{kk.Type()})	// TODO

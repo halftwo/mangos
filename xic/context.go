@@ -120,7 +120,7 @@ func (ctx Context) Set(name string, x any) {
 		if v.Elem().Kind() != reflect.Uint8 {
 			return
 		}
-	case reflect.Complex64, reflect.Complex128, reflect.Struct, reflect.Ptr, reflect.Interface, reflect.Map:
+	case reflect.Complex64, reflect.Complex128, reflect.Struct, reflect.Pointer, reflect.Interface, reflect.Map:
 		return
 	}
 	ctx[name] = x

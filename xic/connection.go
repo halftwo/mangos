@@ -310,7 +310,7 @@ func (con *_Connection) invoke(prx *_Proxy, q *_OutQuest, res *_Result) {
 
 func makePointerValue(t reflect.Type) reflect.Value {
 	var p reflect.Value
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		p = reflect.New(t.Elem())
 	} else {
 		p = reflect.New(t)
@@ -619,7 +619,7 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 		if ok {
 			in := makePointerValue(mi.inType)
 			err = cur.DecodeArgs(in.Interface())
-			if mi.inType.Kind() != reflect.Ptr {
+			if mi.inType.Kind() != reflect.Pointer {
 				in = in.Elem()
 			}
 
