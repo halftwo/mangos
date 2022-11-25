@@ -390,9 +390,9 @@ func (enc *Encoder) encodeStruct(v reflect.Value) {
 
 	enc.writeByte(byte(VBS_DICT))
 
-	fields := CachedStructFields(v.Type())
+	fields := GetStructFieldInfos(v.Type())
 	for _, f := range fields {
-		value := v.Field(int(f.Index))
+		value := v.Field(int(f.Idx))
 		if f.OmitEmpty && IsEmptyValue(value) {
 			continue
 		}

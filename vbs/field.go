@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"strconv"
 	"math"
-	"fmt"
 )
 
 // _TagOptions is the string following a comma in a struct field's "json"
@@ -47,7 +46,7 @@ func (o _TagOptions) Contains(optionName string) bool {
 	return false
 }
 
-func isValidTag(s string) bool {
+func isValidName(s string) bool {
 	for _, c := range s {
 		switch {
 		case strings.ContainsRune("!#$%&()*+-./:<=>?@[]^_{|}~ ", c):
@@ -65,18 +64,18 @@ func isValidTag(s string) bool {
 
 type _FieldInfo struct {
 	Name      string
-	Index     int
+	Idx       int
 	IntName   uint32
 	OmitEmpty bool
 }
 
-type StructFields []_FieldInfo
+type FieldInfos []_FieldInfo
 
-func (p StructFields) Len() int           { return len(p) }
-func (p StructFields) Less(i, j int) bool { return p[i].Name < p[j].Name }
-func (p StructFields) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p FieldInfos) Len() int           { return len(p) }
+func (p FieldInfos) Less(i, j int) bool { return p[i].Name < p[j].Name }
+func (p FieldInfos) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
-func (p StructFields) Find(name string) *_FieldInfo {
+func (p FieldInfos) FindName(name string) *_FieldInfo {
 	i, j := 0, len(p)
 	for i < j {
 		m := int(uint(i+j) >> 1) // avoid overflow
@@ -93,9 +92,9 @@ func (p StructFields) Find(name string) *_FieldInfo {
 	return &p[i]
 }
 
-func (p StructFields) FindInt(n int64) *_FieldInfo {
+func (p FieldInfos) FindInt(n int64) *_FieldInfo {
 	if n > 0 && n <= math.MaxUint32 {
-		for i := 0; i < len(p); i++ {
+		for i, _ := range p {
 			f := &p[i]
 			if f.IntName == uint32(n) {
 				return f
@@ -105,17 +104,11 @@ func (p StructFields) FindInt(n int64) *_FieldInfo {
 	return nil
 }
 
-func getStructFields(t reflect.Type) StructFields {
+func getFieldInfos(t reflect.Type) FieldInfos {
 	var fields []_FieldInfo
-
-	if t.NumField() > math.MaxUint32 {
-		panic(fmt.Sprintf("vbs: too much fields in struct %v", t))
-	}
-
 	for i := 0; i < t.NumField(); i++ {
 		sf := t.Field(i)
-		isUnexported := sf.PkgPath != ""
-		if isUnexported || sf.Anonymous {
+		if !sf.IsExported() || sf.Anonymous {
 			continue
 		}
 
@@ -129,9 +122,12 @@ func getStructFields(t reflect.Type) StructFields {
 		}
 
 		name, opts := parseTag(tag)
-		if !isValidTag(name) {
+
+		/* NB: do we need to check the name?
+		if !isValidName(name) {
 			continue
 		}
+		*/
 
 		iName := uint32(0)
 		if name == "" {
@@ -140,21 +136,21 @@ func getStructFields(t reflect.Type) StructFields {
 			iName = uint32(n)
 		}
 
-		vf := _FieldInfo{Name:name, IntName:iName, Index:i, OmitEmpty:opts.Contains("omitempty"),}
+		vf := _FieldInfo{Name:name, IntName:iName, Idx:i, OmitEmpty:opts.Contains("omitempty"),}
 		fields = append(fields, vf)
 	}
-	sort.Sort(StructFields(fields))
+	sort.Sort(FieldInfos(fields))
 	return fields
 }
 
 var fieldCache struct {
-	value atomic.Value // map[reflect.Type][]_FieldInfo
+	value atomic.Value // map[reflect.Type]FieldInfos
 	mutex sync.Mutex   // used only by writers
 }
 
-// CachedStructFields is like getStructFields but uses a cache to avoid repeated work.
-func CachedStructFields(t reflect.Type) StructFields {
-	m, _ := fieldCache.value.Load().(map[reflect.Type][]_FieldInfo)
+// GetStructFieldInfos is like getFieldInfos but uses a cache to avoid repeated work.
+func GetStructFieldInfos(t reflect.Type) FieldInfos {
+	m, _ := fieldCache.value.Load().(map[reflect.Type]FieldInfos)
 	f := m[t]
 	if f != nil {
 		return f
@@ -162,14 +158,14 @@ func CachedStructFields(t reflect.Type) StructFields {
 
 	// Compute fields without lock.
 	// Might duplicate effort but won't hold other computations back.
-	f = getStructFields(t)
+	f = getFieldInfos(t)
 	if f == nil {
-		f = []_FieldInfo{}
+		f = FieldInfos{}
 	}
 
 	fieldCache.mutex.Lock()
-	m, _ = fieldCache.value.Load().(map[reflect.Type][]_FieldInfo)
-	newM := make(map[reflect.Type][]_FieldInfo, len(m)+1)
+	m, _ = fieldCache.value.Load().(map[reflect.Type]FieldInfos)
+	newM := make(map[reflect.Type]FieldInfos, len(m)+1)
 	for k, v := range m {
 		newM[k] = v
 	}

@@ -322,7 +322,7 @@ func (dec *Decoder) decodeReflectValue(v reflect.Value) {
 		} else if v.Kind() == reflect.Interface {
 			if v.IsNil() {
 				if v.NumMethod() == 0 {
-					x := dec.decodeInterface()
+					x := dec.decodeAny()
 					if dec.err == nil {
 						v.Set(reflect.ValueOf(x))
 					}
@@ -832,14 +832,14 @@ func (dec *Decoder) decodeMapValue(v reflect.Value) {
 
 func (dec *Decoder) decodeStructValue(v reflect.Value) {
 	dec.unpackHeadOfDict()
-	fields := CachedStructFields(v.Type())
+	fields := GetStructFieldInfos(v.Type())
 
 	for dec.err == nil {
 		if dec.unpackIfTail() {
 			break
 		}
 
-		key := dec.decodeInterface()
+		key := dec.decodeAny()
 		if dec.err != nil {
 			return
 		}
@@ -849,22 +849,23 @@ func (dec *Decoder) decodeStructValue(v reflect.Value) {
 		case int64:
 			f = fields.FindInt(x)
 		case string:
-			f = fields.Find(x)
+			f = fields.FindName(x)
 		default:
 			dec.err = xerr.Trace(&InvalidUnmarshalError{reflect.TypeOf(x)})
 			return
 		}
 
 		if f == nil {
-			dec.decodeInterface()
+			// unknown field, discard value
+			dec.decodeAny()
 			continue
 		}
 
-		dec.decodeReflectValue(v.Field(int(f.Index)))
+		dec.decodeReflectValue(v.Field(int(f.Idx)))
 	}
 }
 
-func (dec *Decoder) decodeInterface() (x any) {
+func (dec *Decoder) decodeAny() (x any) {
 	head := dec.unpackHead()
 	if dec.err != nil {
 		return
@@ -902,10 +903,10 @@ func (dec *Decoder) decodeInterface() (x any) {
 		x = bool(head.num != 0)
 
 	case VBS_LIST:
-		x = dec.decodeInterfaceSlice()
+		x = dec.decodeAnySlice()
 
 	case VBS_DICT:
-		x = dec.decodeInterfaceMap()
+		x = dec.decodeAnyMap()
 
 	case VBS_NULL:
 		/* Do nothing */
@@ -917,7 +918,7 @@ func (dec *Decoder) decodeInterface() (x any) {
 	return
 }
 
-func (dec *Decoder) decodeInterfaceSlice() (r any) {
+func (dec *Decoder) decodeAnySlice() (r any) {
 	dec.depth++
 	if dec.depth > dec.maxDepth {
 		dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
@@ -930,7 +931,7 @@ func (dec *Decoder) decodeInterfaceSlice() (r any) {
 			break
 		}
 
-		x := dec.decodeInterface()
+		x := dec.decodeAny()
 		if dec.err != nil {
 			return
 		}
@@ -941,7 +942,7 @@ func (dec *Decoder) decodeInterfaceSlice() (r any) {
 	return
 }
 
-func (dec *Decoder) decodeInterfaceMap() (r any) {
+func (dec *Decoder) decodeAnyMap() (r any) {
 	dec.depth++
 	if dec.depth > dec.maxDepth {
 		dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
@@ -957,8 +958,8 @@ func (dec *Decoder) decodeInterfaceMap() (r any) {
 			break
 		}
 
-		k := dec.decodeInterface()
-		v := dec.decodeInterface()
+		k := dec.decodeAny()
+		v := dec.decodeAny()
 		if dec.err != nil {
 			return
 		}

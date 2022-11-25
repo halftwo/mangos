@@ -28,22 +28,26 @@ func run(engine xic.Engine, args []string) error {
 		return err
 	}
 
+	type EchoAnswer struct {
+		A float32 `vbs:"参数1"`
+		B string `vbs:"参数2"`
+	}
 	quest := xic.NewArguments()
-	quest.Set("hello", 1.25)
-	quest.Set("world", "All men are created equal")
+	quest.Set("参数1", 1.25)
+	quest.Set("参数2", "All men are created equal")
 
-	answer := xic.NewArguments()
-	err = prx.Invoke("echo", quest, answer)
-	fmt.Println(err, answer)
+	var echoans EchoAnswer
+	err = prx.Invoke("echo", quest, &echoans)
+	fmt.Println(err, echoans)
 
 	type TimeAnswer struct {
 		Con string `vbs:"con"`
 		Strftime map[string]string `vbs:"strftime"`
 		Time int `vbs:"time"`
 	}
-	var tan TimeAnswer
-	err = prx.Invoke("time", nil, &tan)
-	fmt.Println(err, tan)
+	var timeans TimeAnswer
+	err = prx.Invoke("time", nil, &timeans)
+	fmt.Println(err, timeans)
 
 	var res xic.Result
 	for i := 0; i < num; i++ {

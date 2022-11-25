@@ -168,7 +168,7 @@ func (args Arguments) GetStruct(name string, p any) error {
 	}
 	w := reflect.ValueOf(v)
 
-	fields := vbs.CachedStructFields(x.Type())
+	fields := vbs.GetStructFieldInfos(x.Type())
 	for _, f := range fields {
 		value := w.MapIndex(reflect.ValueOf(f.Name))
 		if !value.IsValid() {
@@ -179,7 +179,7 @@ func (args Arguments) GetStruct(name string, p any) error {
 			}
 		}
 
-		err := assignValue(x.Field(f.Index), value)
+		err := assignValue(x.Field(f.Idx), value)
 		if err != nil {
 			return err
 		}
@@ -200,9 +200,9 @@ func (args Arguments) SetArgStruct(p any) error {
 		return fmt.Errorf("The parameter should be struct or pointer to struct")
 	}
 
-	fields := vbs.CachedStructFields(x.Type())
+	fields := vbs.GetStructFieldInfos(x.Type())
 	for _, f := range fields {
-		value := x.Field(f.Index)
+		value := x.Field(f.Idx)
 		if f.OmitEmpty && vbs.IsEmptyValue(value) {
 			continue
 		}
@@ -224,7 +224,7 @@ func (args Arguments) ArgStruct(p any) error {
 	x = x.Elem()
 
 	w := reflect.ValueOf(args)
-	fields := vbs.CachedStructFields(x.Type())
+	fields := vbs.GetStructFieldInfos(x.Type())
 	for _, f := range fields {
 		value := w.MapIndex(reflect.ValueOf(f.Name))
 		if !value.IsValid() {
@@ -235,7 +235,7 @@ func (args Arguments) ArgStruct(p any) error {
 			}
 		}
 
-		err := assignValue(x.Field(f.Index), value)
+		err := assignValue(x.Field(f.Idx), value)
 		if err != nil {
 			return err
 		}
@@ -440,9 +440,9 @@ func assignMapFromStruct(lhs, rhs reflect.Value) error {
 	}
 	lelemType := lhs.Type().Elem()
 
-	fields := vbs.CachedStructFields(rhs.Type())
+	fields := vbs.GetStructFieldInfos(rhs.Type())
 	for _, f := range fields {
-		value := rhs.Field(f.Index)
+		value := rhs.Field(f.Idx)
 		if f.OmitEmpty && vbs.IsEmptyValue(value) {
 			continue
 		}
@@ -472,9 +472,9 @@ func assignStructFromMap(lhs, rhs reflect.Value) error {
 		return fmt.Errorf("To assign struct from map, the kind of map key must be string")
 	}
 
-	fields := vbs.CachedStructFields(lhs.Type())
+	fields := vbs.GetStructFieldInfos(lhs.Type())
 	for _, f := range fields {
-		value := lhs.Field(f.Index)
+		value := lhs.Field(f.Idx)
 		elem := lhs.MapIndex(reflect.ValueOf(f.Name))
 		if !elem.IsValid() {
 			continue
@@ -622,9 +622,9 @@ func checkMap(v reflect.Value) error {
 
 func structToMap(v reflect.Value) any {
 	m := map[string]any{}
-	fields := vbs.CachedStructFields(v.Type())
+	fields := vbs.GetStructFieldInfos(v.Type())
 	for _, f := range fields {
-		value := v.Field(f.Index)
+		value := v.Field(f.Idx)
 		if f.OmitEmpty && vbs.IsEmptyValue(value) {
 			continue
 		}
