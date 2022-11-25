@@ -36,16 +36,19 @@ func run(engine xic.Engine, args []string) error {
 	err = prx.Invoke("echo", quest, answer)
 	fmt.Println(err, answer)
 
-	quest = xic.NewArguments()
-	answer = xic.NewArguments()
-	err = prx.Invoke("time", quest, &answer)
-	fmt.Println(err, answer)
+	type TimeAnswer struct {
+		Con string `vbs:"con"`
+		Strftime map[string]string `vbs:"strftime"`
+		Time int `vbs:"time"`
+	}
+	var tan TimeAnswer
+	err = prx.Invoke("time", nil, &tan)
+	fmt.Println(err, tan)
 
 	var res xic.Result
 	for i := 0; i < num; i++ {
-		quest = xic.NewArguments()
-		answer = xic.NewArguments()
-		res = prx.InvokeAsync("time", quest, answer)
+		var answer TimeAnswer
+		res = prx.InvokeAsync("time", nil, &answer)
 		if i % 500 == 0 {
 			res.Wait()
 		}

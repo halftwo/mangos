@@ -8,6 +8,7 @@ import (
 	"time"
         "errors"
         "math/rand"
+        "reflect"
 
 	"halftwo/mangos/xstr"
 	"halftwo/mangos/carp"
@@ -261,8 +262,55 @@ func (r *_Result) broadcast() {
 	r.cond.L.Unlock()
 }
 
+func assert_valid_in(in any) {
+	if in != nil {
+		v := reflect.ValueOf(in)
+		for v.Kind() == reflect.Pointer {
+			v = v.Elem()
+		}
+		valid := false
+		switch v.Kind() {
+		case reflect.Struct:
+			valid = true
+		case reflect.Map:
+			t := v.Type()
+			if t.Key().Kind() == reflect.String {
+				valid = true
+			}
+		}
+		if !valid {
+			panic("Argument in of xic.Proxy.Invoke() must be a map[string]* or a (pointer to) struct")
+		}
+	}
+}
+
+func assert_valid_out(out any) {
+	if out != nil {
+		out_is_ptr := false
+		v := reflect.ValueOf(out)
+		if v.Kind() == reflect.Pointer {
+			v = v.Elem()
+			out_is_ptr = true
+		}
+
+		valid := false
+		switch v.Kind() {
+		case reflect.Struct:
+			valid = out_is_ptr
+		case reflect.Map:
+			t := v.Type()
+			if t.Key().Kind() == reflect.String {
+				valid = true
+			}
+		}
+		if !valid {
+			panic("Argument out of xic.Proxy.Invoke() must be a map[string]* or a pointer to struct")
+		}
+	}
+}
+
 func (prx *_Proxy) Invoke(method string, in, out any) error {
-	return prx.InvokeCtx(prx.Context(), method, in, out)
+	return prx.InvokeCtx(nil, method, in, out)
 }
 
 func (prx *_Proxy) InvokeCtx(ctx Context, method string, in, out any) error {
@@ -271,31 +319,13 @@ func (prx *_Proxy) InvokeCtx(ctx Context, method string, in, out any) error {
 	return res.Err()
 }
 
-func (prx *_Proxy) InvokeOneway(method string, in any) error {
-	return prx.InvokeCtxOneway(nil, method, in)
-}
-
-func (prx *_Proxy) InvokeCtxOneway(ctx Context, method string, in any) error {
-	if ctx != nil {
-		ctx.Extend(prx.Context())
-	} else {
-		ctx = prx.Context()
-	}
-	q := newOutQuest(0, prx.service, method, ctx, in)
-	con, err := prx.pickConnection(ctx)
-	if err != nil {
-		return err
-	}
-
-	con.invoke(prx, q, nil)
-	return nil
-}
-
 func (prx *_Proxy) InvokeAsync(method string, in, out any) Result {
 	return prx.InvokeCtxAsync(nil, method, in, out)
 }
 
 func (prx *_Proxy) InvokeCtxAsync(ctx Context, method string, in, out any) Result {
+	assert_valid_in(in)
+	assert_valid_out(out)
 	if ctx != nil {
 		ctx.Extend(prx.Context())
 	} else {
@@ -309,6 +339,9 @@ func (prx *_Proxy) InvokeCtxAsync(ctx Context, method string, in, out any) Resul
 	if err != nil {
 		res.err = err
 	} else {
+		if in == nil {
+			in = struct{}{}
+		}
 		q := newOutQuest(-1, prx.service, method, ctx, in)
 		con.invoke(prx, q, res)
 	}
@@ -317,5 +350,30 @@ func (prx *_Proxy) InvokeCtxAsync(ctx Context, method string, in, out any) Resul
 		res.broadcast()
 	}
 	return res
+}
+
+func (prx *_Proxy) InvokeOneway(method string, in any) error {
+	return prx.InvokeCtxOneway(nil, method, in)
+}
+
+func (prx *_Proxy) InvokeCtxOneway(ctx Context, method string, in any) error {
+	assert_valid_in(in)
+	if ctx != nil {
+		ctx.Extend(prx.Context())
+	} else {
+		ctx = prx.Context()
+	}
+
+	if in == nil {
+		in = struct{}{}
+	}
+	q := newOutQuest(0, prx.service, method, ctx, in)
+	con, err := prx.pickConnection(ctx)
+	if err != nil {
+		return err
+	}
+
+	con.invoke(prx, q, nil)
+	return nil
 }
 
