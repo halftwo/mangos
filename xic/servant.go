@@ -59,9 +59,9 @@ func IsValidOutType(t reflect.Type) bool {
 	return false
 }
 
-func getMethodTable(servant Servant) (map[string]MethodInfo, error) {
+func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 	v := reflect.TypeOf(servant)
-	mt := make(map[string]MethodInfo, v.NumMethod())
+	mt := make(map[string]*MethodInfo, v.NumMethod())
 	for i := 0; i < v.NumMethod(); i++ {
 		m := v.Method(i)
 		if !strings.HasPrefix(m.Name, "Xic_") {
@@ -82,11 +82,11 @@ func getMethodTable(servant Servant) (map[string]MethodInfo, error) {
 			return nil, fmt.Errorf("The first argument must be of type xic.Current instead of %s", cur.Name())
 		}
 
-		mi := MethodInfo{}
-		mi.Method = m
-		mi.Name = m.Name[4:]
-
-		mi.InType = m.Type.In(2)
+		mi := &MethodInfo{
+			Name: m.Name[4:],
+			Method: m,
+			InType: m.Type.In(2),
+		}
 		if !IsValidInType(mi.InType) {
 			return nil, errors.New("Argument in of xic method must be a (pointer to) map[string]any or a (pointer to) struct")
 		}

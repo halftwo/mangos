@@ -96,15 +96,15 @@ type Engine interface {
 type MethodInfo struct {
 	Name    string
 	Method  reflect.Method
-	Oneway  bool
 	InType  reflect.Type
 	OutType reflect.Type
+	Oneway  bool
 }
 
 type ServantInfo struct {
 	Service string
 	Servant Servant
-	Methods map[string]MethodInfo
+	Methods map[string]*MethodInfo
 }
 
 type Adapter interface {
