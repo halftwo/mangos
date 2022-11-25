@@ -664,17 +664,21 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 	}
 
 wrong:
+	if err != nil {
+		dlog.Log("XIC.EXCEPT", "%s::%s return error --- %s", quest.service, quest.method, err.Error())
+	}
+
 	if cli_oneway {
 		con.numQ.Add(-1)
 		if !srv_oneway {
-			dlog.Log("XIC.WARN", "%s::%s --- Twoway method invoked as oneway", quest.service, quest.method) 
-		}
-		if err != nil {
-			dlog.Log("XIC.WARN", "%s::%s --- %s", quest.service, quest.method, err.Error())
+			dlog.Log("XIC.WARN", "%s::%s --- Twoway method invoked as oneway, con=%v", quest.service, quest.method, con)
 		}
 	} else {
-		if srv_oneway && err == nil {
-			err = fmt.Errorf("%s::%s --- Oneway method invoked as twoway", quest.service, quest.method)
+		if srv_oneway {
+			dlog.Log("XIC.WARN", "%s::%s --- Oneway method invoked as twoway, con=%v", quest.service, quest.method, con)
+			if err == nil {
+				answer = newOutAnswerNormal(quest.txid, struct{}{})
+			}
 		}
 
 		if err != nil {
