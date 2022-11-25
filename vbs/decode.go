@@ -174,20 +174,27 @@ func (dec *Decoder) SetMaxStringLength(length int) {
 	}
 }
 
-// Decode reads the next VBS-encoded value from its input and stores it in the value pointed to by v.
-func (dec *Decoder) Decode(data any) error {
-	v := reflect.ValueOf(data)
-	if v.IsNil() {
-		panic("Data must be a map or a pointer, and not nil.")
-	}
+// Decode reads and decode the next VBS-encoded value from its input and 
+// stores it into the value pointed to by out.
+// out must be a non-nil pointer or map.
+func (dec *Decoder) Decode(out any) error {
+	valid := false
+	v := reflect.ValueOf(out)
 	switch v.Kind() {
 	case reflect.Pointer:
-		dec.decodeReflectValue(v.Elem())
+		if !v.IsNil() {
+			valid = true
+			v = v.Elem()
+		}
 	case reflect.Map:
-		dec.decodeReflectValue(v)
-	default:
-		dec.err = xerr.Trace(&InvalidUnmarshalError{v.Type()})
+		valid = !v.IsNil()
 	}
+
+	if !valid {
+		panic("out must be a pointer or a map, and not nil.")
+	}
+
+	dec.decodeReflectValue(v)
 	return dec.err
 }
 

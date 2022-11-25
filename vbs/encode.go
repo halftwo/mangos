@@ -368,11 +368,10 @@ func (enc *Encoder) encodeMap(v reflect.Value) {
 
 	enc.writeByte(byte(VBS_DICT))
 
-	keys := v.MapKeys()
-	for _, key := range(keys) {
-		val := v.MapIndex(key)
-		enc.encodeReflectValue(key)
-		enc.encodeReflectValue(val)
+	iter := v.MapRange()
+	for iter.Next() {
+		enc.encodeReflectValue(iter.Key())
+		enc.encodeReflectValue(iter.Value())
 		if enc.err != nil {
 			return
 		}
