@@ -11,11 +11,13 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"os"
 	"io"
 
+	"halftwo/mangos/vbs"
 	"halftwo/mangos/dlog"
 	"halftwo/mangos/srp6a"
 )
@@ -580,6 +582,73 @@ func err2OutAnswer(quest *_InQuest, err error) *_OutAnswer {
 	return answer
 }
 
+func type2rune(t reflect.Type) rune {
+	switch t.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return 'i'
+	case reflect.String:
+		return 's'
+	case reflect.Bool:
+		return 't'
+	case reflect.Float32, reflect.Float64:
+		return 'f'
+	case reflect.Array, reflect.Slice:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return 'b'
+		}
+		return 'L'
+	case reflect.Map, reflect.Struct:
+		return 'D'
+	}
+	return 'X'
+}
+
+func printMethodArg(w io.Writer, t reflect.Type) {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Map:
+		fmt.Fprint(w, "{...}")
+	case reflect.Struct:
+		fmt.Fprint(w, "{")
+		fields := vbs.GetStructFieldInfos(t)
+		for i, f := range fields {
+			if i > 0 {
+				fmt.Fprint(w, ";")
+			}
+			if f.OmitEmpty {
+				fmt.Fprint(w, "?")
+			}
+			fmt.Fprintf(w, "%s^%c", f.Name, type2rune(t.Field(f.Idx).Type))
+		}
+		fmt.Fprint(w, "}")
+	}
+}
+
+func printMethodInfo(w io.Writer, mi *MethodInfo) {
+	fmt.Fprintf(w, "%s", mi.Name)
+	printMethodArg(w, mi.InType)
+	if !mi.Oneway {
+		printMethodArg(w, mi.OutType)
+	}
+}
+
+func printServantMethods(w io.Writer, si *ServantInfo) {
+	names := make([]string, 0, len(si.Methods))
+	for name := range si.Methods {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for i, name := range names {
+		if i > 0 {
+			fmt.Fprint(w, "\n")
+		}
+		printMethodInfo(w, si.Methods[name])
+	}
+}
+
 func makePointerValue(t reflect.Type) reflect.Value {
 	var p reflect.Value
 	if t.Kind() == reflect.Pointer {
@@ -648,15 +717,22 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 			answer = newOutAnswerNormal(quest.txid, out.Interface())
 		}
 	} else {
-		inArgs := Arguments{}
-		err = quest.DecodeArgs(inArgs)
-		if err != nil {
-			goto wrong
+		outArgs := Arguments{}
+		if quest.method == "" {
+			b := &bytes.Buffer{}
+			printServantMethods(b, si)
+			outArgs.Set("methods", b.String())
+		} else {
+			inArgs := Arguments{}
+			err = quest.DecodeArgs(inArgs)
+			if err != nil {
+				goto wrong
+			}
+
+			cur := newCurrent(con, quest)
+			err = si.Servant.Xic(cur, inArgs, outArgs)
 		}
 
-		cur := newCurrent(con, quest)
-		outArgs := Arguments{}
-		err = si.Servant.Xic(cur, inArgs, outArgs)
 		if err != nil {
 			goto wrong
 		}
