@@ -21,8 +21,8 @@ type Decoder struct {
 	maxStrLength int
 	maxDepth int16
 	depth int16
-	eof bool
 	finished bool
+	nocopy bool
 	unread bool
 	lastByte byte
 	err error
@@ -30,45 +30,47 @@ type Decoder struct {
 }
 
 func (dec *Decoder) readBlob(data []byte) (n int) {
-	if dec.err == nil {
-		k := len(data)
-		if dec.maxLength > 0 && k > dec.maxLength - dec.size {
+	if dec.err != nil {
+		return
+	}
+
+	k := len(data)
+	if k > dec.left() {
+		dec.finished = true
+		dec.err = xerr.Trace(&DataLackError{})
+		return
+	} else if k <= 0 {
+		return
+	}
+
+	var err error
+	if dec.unread {
+		dec.unread = false
+		data[0] = dec.lastByte
+		if k > 1 {
+			n, err = dec.r.Read(data[1:])
+			if n > 0 {
+				dec.lastByte = data[n]
+			}
+		}
+		n += 1
+	} else {
+		n, err = dec.r.Read(data)
+		if n > 0 {
+			dec.lastByte = data[n-1]
+		}
+	}
+
+	if err != nil {
+		if err == io.EOF {
 			dec.finished = true
-			k = dec.maxLength - dec.size
 		}
+		dec.err = xerr.Trace(&DataLackError{err})
+	}
 
-		if k > 0 {
-			var err error
-			data = data[:k]
-			if dec.unread {
-				dec.unread = false
-				data[0] = dec.lastByte
-				if k > 1 {
-					n, err = dec.r.Read(data[1:])
-					if n > 0 {
-						dec.lastByte = data[n]
-					}
-				}
-				n += 1
-			} else {
-				n, err = dec.r.Read(data)
-				if n > 0 {
-					dec.lastByte = data[n-1]
-				}
-			}
-
-			if err != nil {
-				if err == io.EOF {
-					dec.eof = true
-				}
-				dec.err = xerr.Trace(&DataLackError{err})
-			}
-
-			dec.size += n
-			if dec.size == dec.maxLength {
-				dec.finished = true
-			}
-		}
+	dec.size += n
+	if dec.size == dec.maxLength {
+		dec.finished = true
 	}
 	return
 }
@@ -92,7 +94,7 @@ func (dec *Decoder) readByte() byte {
 		}
 
 		if err == io.EOF {
-			dec.eof = true
+			dec.finished = true
 		}
 		dec.err = xerr.Trace(&DataLackError{err})
 	}
@@ -130,29 +132,53 @@ func UnmarshalOneItem(buf []byte, v any) (rest []byte, err error) {
 // NewDecoder returns a Decoder that decodes VBS from input stream r
 func NewDecoder(r io.Reader) *Decoder {
 	maxLength := MaxLength
+	var buffer []byte
 	if b, ok := r.(*bytes.Buffer); ok {
 		maxLength = b.Len()
+		buffer = b.Bytes()
 	}
-	return NewDecoderLength(r, maxLength)
+	dec := NewDecoderLength(r, maxLength)
+	dec.buffer = buffer
+	return dec
+}
+
+// The decoded []byte (vbs blob) from the buf owns the buf. 
+// Don't change the content of buf before the decoded []byte is unused.
+func NewDecoderBytes(buf []byte) *Decoder {
+	r := bytes.NewBuffer(buf)
+	dec := NewDecoderLength(r, len(buf))
+	dec.buffer = buf
+	dec.nocopy = true
+	return dec
 }
 
 func NewDecoderLength(r io.Reader, maxLength int) *Decoder {
+	if maxLength <= 0 {
+		maxLength = MaxLength
+	}
 	maxString := MaxStringLength
-	if maxLength > 0 && maxString >= maxLength {
+	if maxString >= maxLength {
 		maxString = maxLength - 1
 	}
 
 	return &Decoder{r:r, maxLength:maxLength, maxStrLength:maxString, maxDepth:MaxDepth}
 }
 
-func NewDecoderBytes(buf []byte) *Decoder {
-	r := bytes.NewBuffer(buf)
-	return NewDecoderLength(r, len(buf))
+func (dec *Decoder) SetMaxLength(length int) {
+	if length <= 0 {
+		dec.maxLength = MaxLength
+	} else {
+		dec.maxLength = length
+	}
 }
 
-// SetMaxLength sets the max length of string and blob in the VBS encoded data
-func (dec *Decoder) SetMaxLength(length int) {
-	dec.maxLength = length
+// SetMaxStringLength sets the max length of string and blob in the VBS encoded data
+func (dec *Decoder) SetMaxStringLength(length int) {
+	if length <= 0 {
+		dec.maxStrLength = MaxStringLength
+	} else {
+		dec.maxStrLength = length
+	}
 }
 
 // SetMaxDepth sets the max depth of VBS dict and list
@@ -166,13 +192,6 @@ func (dec *Decoder) SetMaxDepth(depth int) {
 	}
 }
 
-func (dec *Decoder) SetMaxStringLength(length int) {
-	if length < 0 {
-		dec.maxStrLength = MaxStringLength
-	} else {
-		dec.maxStrLength = length
-	}
-}
 
 // Decode reads and decode the next VBS-encoded value from its input and 
 // stores it into the value pointed to by out.
@@ -203,10 +222,7 @@ func (dec *Decoder) Err() error {
 }
 
 func (dec *Decoder) More() bool {
-	if dec.eof || dec.finished {
-		return false
-	}
-	return true
+	return !dec.finished && dec.left() > 0
 }
 
 func (dec *Decoder) Size() int {
@@ -214,36 +230,45 @@ func (dec *Decoder) Size() int {
 }
 
 func (dec *Decoder) left() int {
-	if dec.maxLength > 0 {
-		return (dec.maxLength - dec.size)
-	}
-	return math.MaxInt64
+	return (dec.maxLength - dec.size)
 }
 
-func (dec *Decoder) getBytes(number int64) []byte {
+func (dec *Decoder) _get_bytes(number int64, take bool) []byte {
+	if number > int64(dec.left()) || number > int64(dec.maxStrLength) {
+		dec.err = xerr.Trace(&DataLackError{})
+		return nil
+	}
+
 	num := int(number)
-	if num > dec.left() || num > dec.maxStrLength {
-		dec.err = xerr.Trace(&InvalidVbsError{})
-		return dec.buffer[:0]
+	if dec.nocopy {
+		dec.size += num
+		return dec.r.(*bytes.Buffer).Next(num)
+	}
+
+	if take {
+		buf := make([]byte, 0, num)
+		k := dec.readBlob(buf)
+		return buf[:k]
+	}
+
+	if _, ok := dec.r.(*bytes.Buffer); ok {
+		dec.size += num
+		return dec.r.(*bytes.Buffer).Next(num)
 	}
 
 	if cap(dec.buffer) < num {
-		dec.buffer = make([]byte, num)
+		dec.buffer = make([]byte, 0, num)
 	}
 	k := dec.readBlob(dec.buffer[:num])
 	return dec.buffer[:k]
 }
 
-func (dec *Decoder) takeBytes(number int64) []byte {
-	num := int(number)
-	if num > dec.left() || num > dec.maxStrLength {
-		dec.err = xerr.Trace(&InvalidVbsError{})
-		return nil
-	}
+func (dec *Decoder) getBytes(number int64) []byte {
+	return dec._get_bytes(number, false)
+}
 
-	buf := make([]byte, num)
-	k := dec.readBlob(buf)
-	return buf[:k]
+func (dec *Decoder) takeBytes(number int64) []byte {
+	return dec._get_bytes(number, true)
 }
 
 func (dec *Decoder) copyBytes(buf []byte) int {
