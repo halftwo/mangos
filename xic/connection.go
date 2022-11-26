@@ -583,6 +583,9 @@ func err2OutAnswer(quest *_InQuest, err error) *_OutAnswer {
 }
 
 func type2rune(t reflect.Type) rune {
+	if t == vbs.ReflectTypeOfDecimal64 {
+		return 'd'
+	}
 	switch t.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
@@ -597,33 +600,38 @@ func type2rune(t reflect.Type) rune {
 		if t.Elem().Kind() == reflect.Uint8 {
 			return 'b'
 		}
-		return 'L'
+		return 'l'
 	case reflect.Map, reflect.Struct:
-		return 'D'
+		return 'm'
 	}
-	return 'X'
+	return 'x'
 }
 
+/**
+  (name1/type1,name2/type2,?name3/type3,...,nameN/typeN) if struct
+  () if empty struct
+  (...) if map
+**/
 func printMethodArg(w io.Writer, t reflect.Type) {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	switch t.Kind() {
 	case reflect.Map:
-		fmt.Fprint(w, "{...}")
+		fmt.Fprint(w, "(...)")
 	case reflect.Struct:
-		fmt.Fprint(w, "{")
+		fmt.Fprint(w, "(")
 		fields := vbs.GetStructFieldInfos(t)
 		for i, f := range fields {
 			if i > 0 {
-				fmt.Fprint(w, ";")
+				fmt.Fprint(w, ",")
 			}
 			if f.OmitEmpty {
 				fmt.Fprint(w, "?")
 			}
-			fmt.Fprintf(w, "%s^%c", f.Name, type2rune(t.Field(f.Idx).Type))
+			fmt.Fprintf(w, "%s/%c", f.Name, type2rune(t.Field(f.Idx).Type))
 		}
-		fmt.Fprint(w, "}")
+		fmt.Fprint(w, ")")
 	}
 }
 
