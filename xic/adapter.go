@@ -141,7 +141,9 @@ func (adp *_Adapter) AddServant(service string, servant Servant) (Proxy, error) 
 	if err != nil {
 		return nil, err
 	}
-	adp.srvMap.Store(service, si)
+	if _, loaded := adp.srvMap.LoadOrStore(service, si); loaded {
+		return nil, fmt.Errorf("Service \"%s\" already added", service);
+	}
 
 	proxy := service
 	if len(adp.endpoints) > 0 {

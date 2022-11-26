@@ -8,16 +8,20 @@ import (
 )
 
 
-func empty_equal(t1 any, t2 any) bool {
-	x1 := reflect.ValueOf(t1)
-	x2 := reflect.ValueOf(t2)
+func equal(v1 any, v2 any) bool {
+	x1 := reflect.ValueOf(v1)
+	x2 := reflect.ValueOf(v2)
 	if x1.Kind() != x2.Kind() {
 		return false
 	}
-	if x1.Len() != x2.Len() {
-		return false
+
+	switch x1.Kind() {
+	case reflect.Map, reflect.Slice:
+		if x1.Len() == 0 && x2.Len() == 0 {
+			return true
+		}
 	}
-	return true
+	return reflect.DeepEqual(v1, v2)
 }
 
 func testMarshal(t *testing.T, u any) {
@@ -35,7 +39,7 @@ func testMarshal(t *testing.T, u any) {
 	}
 
 	v := pv.Elem().Interface()
-	if !reflect.DeepEqual(u, v) && !empty_equal(u, v) {
+	if !equal(u, v) {
 		fmt.Println(u)
 		fmt.Println(v)
 		t.Fatal("The unmarshaled data does not match the original")
@@ -43,20 +47,28 @@ func testMarshal(t *testing.T, u any) {
 }
 
 func benchmark(b *testing.B, u any) {
-	buf := &bytes.Buffer{}
-	enc := NewEncoder(buf)
-	dec := NewDecoder(buf)
-
 	pv := reflect.New(reflect.TypeOf(u))
 	pi := pv.Interface()
+
+	buf := &bytes.Buffer{}
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
-		enc.Encode(u)
-		dec.Decode(pi)
+
+		enc := NewEncoder(buf)
+		err := enc.Encode(u)
+		if err != nil {
+			b.Fatalf("enc.Encode() failed, %#v", err)
+		}
+
+		dec := NewDecoder(buf)
+		err = dec.Decode(pi)
+		if err != nil {
+			b.Fatalf("dec.Decode() failed, %#v", err)
+		}
 	}
 
 	v := pv.Elem().Interface()
-	if !reflect.DeepEqual(u, v) && !empty_equal(u, v) {
+	if !equal(u, v) {
 		fmt.Println(u)
 		fmt.Println(v)
 		b.Fatalf("The unmarshaled data does not match the original")
@@ -102,6 +114,11 @@ func TestMarshalSlice(t *testing.T) {
 
 	var u4 []int	// nil 
 	testMarshal(t, u4)
+}
+
+func TestMarshalSliceBytes(t *testing.T) {
+	u := [...][]byte{[]byte{1,2,3,4,5}, []byte{4,5,6,7,8}, []byte{7,8,9,10,11}}
+	testMarshal(t, u)
 }
 
 func BenchmarkSliceBytes(b *testing.B) {

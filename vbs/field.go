@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"strconv"
 	"math"
 )
@@ -143,35 +142,19 @@ func getFieldInfos(t reflect.Type) FieldInfos {
 	return fields
 }
 
-var fieldCache struct {
-	value atomic.Value // map[reflect.Type]FieldInfos
-	mutex sync.Mutex   // used only by writers
-}
+var fieldMap sync.Map
 
 // GetStructFieldInfos is like getFieldInfos but uses a cache to avoid repeated work.
 func GetStructFieldInfos(t reflect.Type) FieldInfos {
-	m, _ := fieldCache.value.Load().(map[reflect.Type]FieldInfos)
-	f := m[t]
-	if f != nil {
-		return f
+	if f, ok := fieldMap.Load(t); ok {
+		return f.(FieldInfos)
 	}
 
-	// Compute fields without lock.
-	// Might duplicate effort but won't hold other computations back.
-	f = getFieldInfos(t)
+	f := getFieldInfos(t)
 	if f == nil {
 		f = FieldInfos{}
 	}
-
-	fieldCache.mutex.Lock()
-	m, _ = fieldCache.value.Load().(map[reflect.Type]FieldInfos)
-	newM := make(map[reflect.Type]FieldInfos, len(m)+1)
-	for k, v := range m {
-		newM[k] = v
-	}
-	newM[t] = f
-	fieldCache.value.Store(newM)
-	fieldCache.mutex.Unlock()
+	fieldMap.Store(t, f)
 	return f
 }
 

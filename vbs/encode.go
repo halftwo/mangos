@@ -319,7 +319,7 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 		} else {
 			n := v.Len()
 			if cap(enc.buffer) < n {
-				enc.buffer = make([]byte, n)
+				enc.buffer = make([]byte, 0, n)
 			}
 			buf = enc.buffer[:n]
 			reflect.Copy(reflect.ValueOf(buf), v)

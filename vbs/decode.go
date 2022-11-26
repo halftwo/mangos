@@ -18,7 +18,7 @@ type Decoder struct {
 	r io.Reader
 	size int
 	maxLength int
-	maxStrLength int
+	maxStrLen int
 	maxDepth int16
 	depth int16
 	finished bool
@@ -131,15 +131,12 @@ func UnmarshalOneItem(buf []byte, v any) (rest []byte, err error) {
 
 // NewDecoder returns a Decoder that decodes VBS from input stream r
 func NewDecoder(r io.Reader) *Decoder {
-	maxLength := MaxLength
-	var buffer []byte
 	if b, ok := r.(*bytes.Buffer); ok {
-		maxLength = b.Len()
-		buffer = b.Bytes()
+		dec := NewDecoderLength(r, b.Len())
+		dec.buffer = b.Bytes()
+		return dec
 	}
-	dec := NewDecoderLength(r, maxLength)
-	dec.buffer = buffer
-	return dec
+	return NewDecoderLength(r, MaxLength)
 }
 
 // The decoded []byte (vbs blob) from the buf owns the buf. 
@@ -161,7 +158,7 @@ func NewDecoderLength(r io.Reader, maxLength int) *Decoder {
 		maxString = maxLength - 1
 	}
 
-	return &Decoder{r:r, maxLength:maxLength, maxStrLength:maxString, maxDepth:MaxDepth}
+	return &Decoder{r:r, maxLength:maxLength, maxStrLen:maxString, maxDepth:MaxDepth}
 }
 
 func (dec *Decoder) SetMaxLength(length int) {
@@ -175,9 +172,9 @@ func (dec *Decoder) SetMaxLength(length int) {
 // SetMaxStringLength sets the max length of string and blob in the VBS encoded data
 func (dec *Decoder) SetMaxStringLength(length int) {
 	if length <= 0 {
-		dec.maxStrLength = MaxStringLength
+		dec.maxStrLen = MaxStringLength
 	} else {
-		dec.maxStrLength = length
+		dec.maxStrLen = length
 	}
 }
 
@@ -234,7 +231,7 @@ func (dec *Decoder) left() int {
 }
 
 func (dec *Decoder) _get_bytes(number int64, take bool) []byte {
-	if number > int64(dec.left()) || number > int64(dec.maxStrLength) {
+	if number > int64(dec.left()) || number > int64(dec.maxStrLen) {
 		dec.err = xerr.Trace(&DataLackError{})
 		return nil
 	}
@@ -247,7 +244,7 @@ func (dec *Decoder) _get_bytes(number int64, take bool) []byte {
 
 	if take {
 		buf := make([]byte, 0, num)
-		k := dec.readBlob(buf)
+		k := dec.readBlob(buf[:num])
 		return buf[:k]
 	}
 
@@ -273,7 +270,7 @@ func (dec *Decoder) takeBytes(number int64) []byte {
 
 func (dec *Decoder) copyBytes(buf []byte) int {
 	num := len(buf)
-	if num > dec.left() || num > dec.maxStrLength {
+	if num > dec.left() || num > dec.maxStrLen {
 		dec.err = xerr.Trace(&InvalidVbsError{})
 		return 0
 	}
