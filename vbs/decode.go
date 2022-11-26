@@ -26,7 +26,7 @@ type Decoder struct {
 	unread bool
 	lastByte byte
 	err error
-	bytes []byte
+	buffer []byte
 }
 
 func (dec *Decoder) readBlob(data []byte) (n int) {
@@ -224,14 +224,14 @@ func (dec *Decoder) getBytes(number int64) []byte {
 	num := int(number)
 	if num > dec.left() || num > dec.maxStrLength {
 		dec.err = xerr.Trace(&InvalidVbsError{})
-		return dec.bytes[:0]
+		return dec.buffer[:0]
 	}
 
-	if cap(dec.bytes) < num {
-		dec.bytes = make([]byte, num)
+	if cap(dec.buffer) < num {
+		dec.buffer = make([]byte, num)
 	}
-	k := dec.readBlob(dec.bytes[:num])
-	return dec.bytes[:k]
+	k := dec.readBlob(dec.buffer[:num])
+	return dec.buffer[:k]
 }
 
 func (dec *Decoder) takeBytes(number int64) []byte {
