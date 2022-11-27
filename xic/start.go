@@ -4,10 +4,9 @@ import (
 	"os"
 	"fmt"
 	"strings"
+	"time"
 	"os/signal"
 	"sync/atomic"
-
-	"halftwo/mangos/dlog"
 )
 
 func parseArgs() (file string, cfs map[string]string, args []string) {
@@ -62,6 +61,7 @@ func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalH
 		panic("function start_with_setting() can only be called once")
 	}
 
+	start_time := time.Now()
 	if setting == nil {
 		setting = NewSetting()
 	}
@@ -70,7 +70,8 @@ func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalH
 	if configFile != "" {
 		err := setting.LoadFile(configFile)
 		if err != nil {
-			usage()
+			fmt.Fprintln(os.Stderr, "ERROR:", err)
+			return err
 		}
 	}
 	for k, v := range cfs {
@@ -88,13 +89,14 @@ func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalH
 
 	err := entree(engine, args)
 	if err != nil {
-		dlog.SetOption(dlog.OPT_STDERR)
-		dlog.Log("ERROR", "%s", err.Error())
-		usage()
-		return err
+		engine.Shutdown()
+		fmt.Fprintln(os.Stderr, "ERROR:", err)
+		if configFile == "" && time.Now().Sub(start_time) < time.Second {
+			usage()
+		}
 	}
 
 	engine.WaitForShutdown();
-	return nil
+	return err
 }
 
