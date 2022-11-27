@@ -22,8 +22,9 @@ func newServant(adapter xic.Adapter) *_DemoServant {
 	return srv
 }
 
-func (srv *_DemoServant) Xic_echo(cur xic.Current, in xic.Arguments, out xic.Arguments) error {
-	out.CopyFrom(in)
+func (srv *_DemoServant) Xic_echo(cur xic.Current, in xic.Arguments, out *xic.Arguments) error {
+	*out = in
+//	out.CopyFrom(in)
 	return nil
 }
 
