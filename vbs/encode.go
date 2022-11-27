@@ -390,10 +390,10 @@ func (enc *Encoder) encodeStruct(v reflect.Value) {
 			continue
 		}
 
-		if f.IntName == 0 {
-			enc.encodeString(f.Name)
+		if f.NameInt != 0 {
+			enc.encodeInteger(int64(f.NameInt))
 		} else {
-			enc.encodeInteger(int64(f.IntName))
+			enc.encodeString(f.Name)
 		}
 		enc.encodeReflectValue(value)
 		if enc.err != nil {

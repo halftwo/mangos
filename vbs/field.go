@@ -64,8 +64,9 @@ func isValidName(s string) bool {
 
 type _FieldInfo struct {
 	Name      string
+	NameBlob  []byte
+	NameInt   uint32
 	Idx       int
-	IntName   uint32
 	OmitEmpty bool
 }
 
@@ -96,14 +97,14 @@ func (p FieldInfos) FindNameBlob(name []byte) *_FieldInfo {
 	i, j := 0, len(p)
 	for i < j {
 		m := int(uint(i+j) >> 1) // avoid overflow
-		if bytes.Compare([]byte(p[m].Name), name) >= 0 {
+		if bytes.Compare(p[m].NameBlob, name) >= 0 {
 			j = m
 		} else {
 			i = m + 1
 		}
 	}
 
-	if i >= len(p) || !bytes.Equal([]byte(p[i].Name), name) {
+	if i >= len(p) || !bytes.Equal(p[i].NameBlob, name) {
 		return nil
 	}
 	return &p[i]
@@ -113,7 +114,7 @@ func (p FieldInfos) FindInt(n int64) *_FieldInfo {
 	if n > 0 && n <= math.MaxUint32 {
 		for i, _ := range p {
 			f := &p[i]
-			if f.IntName == uint32(n) {
+			if f.NameInt == uint32(n) {
 				return f
 			}
 		}
@@ -122,7 +123,7 @@ func (p FieldInfos) FindInt(n int64) *_FieldInfo {
 }
 
 func getFieldInfos(t reflect.Type) FieldInfos {
-	var fields []_FieldInfo
+	fields := []_FieldInfo{}
 	for i := 0; i < t.NumField(); i++ {
 		sf := t.Field(i)
 		if !sf.IsExported() || sf.Anonymous {
@@ -146,14 +147,14 @@ func getFieldInfos(t reflect.Type) FieldInfos {
 		}
 		*/
 
-		iName := uint32(0)
+		nameInt := uint32(0)
 		if name == "" {
 			name = sf.Name
 		} else if n, err := strconv.ParseUint(name, 10, 32); err == nil && n > 0 {
-			iName = uint32(n)
+			nameInt = uint32(n)
 		}
 
-		vf := _FieldInfo{Name:name, IntName:iName, Idx:i, OmitEmpty:opts.Contains("omitempty"),}
+		vf := _FieldInfo{Name:name, NameBlob:[]byte(name), NameInt:nameInt, Idx:i, OmitEmpty:opts.Contains("omitempty"),}
 		fields = append(fields, vf)
 	}
 	sort.Sort(FieldInfos(fields))
@@ -168,12 +169,8 @@ func GetStructFieldInfos(t reflect.Type) FieldInfos {
 		return f.(FieldInfos)
 	}
 
-	f := getFieldInfos(t)
-	if f == nil {
-		f = FieldInfos{}
-	}
-	fieldMap.Store(t, f)
-	return f
+	f, _ := fieldMap.LoadOrStore(t, getFieldInfos(t))
+	return f.(FieldInfos)
 }
 
 func IsEmptyValue(v reflect.Value) bool {
