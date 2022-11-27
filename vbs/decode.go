@@ -32,14 +32,10 @@ type Decoder struct {
 }
 
 func (dec *Decoder) _read_blob(data []byte) (n int) {
-	if dec.err != nil {
-		return
-	}
-
 	k := len(data)
 	if k > dec.left() {
 		dec.finished = true
-		dec.err = xerr.Trace(&DataLackError{})
+		dec.err = xerr.Trace(&DataLackError{Expect:int64(k), Got:dec.left()})
 		return
 	} else if k <= 0 {
 		return
@@ -67,7 +63,7 @@ func (dec *Decoder) _read_blob(data []byte) (n int) {
 		if err == io.EOF {
 			dec.finished = true
 		}
-		dec.err = xerr.Trace(&DataLackError{err})
+		dec.err = xerr.Trace(&DataLackError{Expect:int64(k), Got:n})
 	}
 
 	dec.size += n
@@ -98,7 +94,7 @@ func (dec *Decoder) readByte() byte {
 		if err == io.EOF {
 			dec.finished = true
 		}
-		dec.err = xerr.Trace(&DataLackError{err})
+		dec.err = xerr.Trace(&DataLackError{Expect:1, Got:0})
 	}
 	return 0
 }
@@ -233,6 +229,10 @@ func (dec *Decoder) left() int {
 }
 
 func (dec *Decoder) _bytesbuffer_next(num int) []byte {
+	if num > dec.left() {
+		dec.err = xerr.Trace(&DataLackError{Expect:int64(num), Got:dec.left()})
+		return nil
+	}
 	if dec.unread {
 		dec.unread = false
 		err := dec.r.(*bytes.Buffer).UnreadByte()
@@ -246,8 +246,8 @@ func (dec *Decoder) _bytesbuffer_next(num int) []byte {
 }
 
 func (dec *Decoder) _get_bytes(number int64, take bool) []byte {
-	if number > int64(dec.left()) || number > int64(dec.maxStrLen) {
-		dec.err = xerr.Trace(&DataLackError{})
+	if number > int64(dec.maxStrLen) {
+		dec.err = xerr.Trace(&StringTooLongError{Got:number, Max:dec.maxStrLen})
 		return nil
 	}
 
@@ -285,9 +285,8 @@ func min[T ~int|~int64](a, b T) T {
 }
 
 func (dec *Decoder) discardBytes(number int64) {
-	if number > int64(dec.left()) || number > int64(dec.maxStrLen) {
-		dec.err = xerr.Trace(&DataLackError{})
-		return
+	if number > int64(dec.maxStrLen) {
+		dec.err = xerr.Trace(&StringTooLongError{Got:number, Max:dec.maxStrLen})
 	}
 
 	num := int(number)
@@ -297,6 +296,7 @@ func (dec *Decoder) discardBytes(number int64) {
 
 	if _, ok := dec.r.(*bytes.Buffer); ok {
 		dec._bytesbuffer_next(num)
+		return
 	}
 
 	bufcap := min(BLOCK_SIZE, num)
@@ -316,17 +316,6 @@ func (dec *Decoder) getBytes(number int64) []byte {
 
 func (dec *Decoder) takeBytes(number int64) []byte {
 	return dec._get_bytes(number, true)
-}
-
-func (dec *Decoder) copyBytes(buf []byte) int {
-	num := len(buf)
-	if num > dec.left() || num > dec.maxStrLen {
-		dec.err = xerr.Trace(&InvalidVbsError{})
-		return 0
-	}
-
-	k := dec._read_blob(buf)
-	return k
 }
 
 func (dec *Decoder) decodeReflectValue(v reflect.Value) {
@@ -699,47 +688,16 @@ func (dec *Decoder) decodeUintValue(v reflect.Value) {
 	}
 }
 
-func (dec *Decoder) unpackString() string {
-	head := dec.unpackHeadKind(VBS_STRING, true)
-	if dec.err == nil {
-		buf := dec.getBytes(head.num)
-		if dec.err == nil {
-			return string(buf)
-		}
-	}
-	return ""
-}
-
 func (dec *Decoder) decodeStringValue(v reflect.Value) {
-	s := dec.unpackString()
-	if dec.err == nil {
-		v.SetString(s)
-	}
-}
-
-func (dec *Decoder) unpackByteArray(buf []byte) {
-	head := dec.unpackHeadKind(VBS_BLOB, true)
-	if dec.err == nil {
-		if int(head.num) == len(buf) {
-			dec.copyBytes(buf)
-		} else {
-			dec.err = xerr.Trace(&ArrayLengthError{len(buf)})
-		}
-	}
-}
-
-func (dec *Decoder) unpackByteSlice() (buf []byte) {
-	head := dec.unpackHead()
+	head := dec.unpackHeadKind(VBS_STRING, true)
 	if dec.err != nil {
 		return
 	}
 
-	if head.vbsKind == VBS_BLOB || head.vbsKind == VBS_STRING {
-		buf = dec.takeBytes(head.num)
-	} else {
-		dec.err = xerr.Trace(&MismatchedKindError{Expect:VBS_BLOB, Got:head.vbsKind})
+	buf := dec.getBytes(head.num)
+	if dec.err == nil {
+		v.SetString(string(buf))
 	}
-	return
 }
 
 func (dec *Decoder) decodeBoolValue(v reflect.Value) {
@@ -800,8 +758,16 @@ func (dec *Decoder) decodeComplexValue(v reflect.Value) {
 
 func (dec *Decoder) decodeArrayValue(v reflect.Value) {
 	if v.Type().Elem().Kind() == reflect.Uint8 {	// VBS_BLOB
+		head := dec.unpackHeadKind(VBS_BLOB, true)
+		if dec.err != nil {
+			return
+		}
 		buf := v.Slice(0, v.Len()).Interface().([]byte)
-		dec.unpackByteArray(buf)
+		if head.num != int64(len(buf)) {
+			dec.err = xerr.Trace(&ArrayLengthError{len(buf)})
+			return
+		}
+		dec._read_blob(buf)
 		return
 	}
 
@@ -825,7 +791,17 @@ func (dec *Decoder) decodeArrayValue(v reflect.Value) {
 
 func (dec *Decoder) decodeSliceValue(v reflect.Value) {
 	if v.Type().Elem().Kind() == reflect.Uint8 {	// VBS_BLOB
-		buf := dec.unpackByteSlice()
+		head := dec.unpackHead()
+		if dec.err != nil {
+			return
+		}
+
+		if head.vbsKind != VBS_BLOB && head.vbsKind != VBS_STRING {
+			dec.err = xerr.Trace(&MismatchedKindError{Expect:VBS_BLOB, Got:head.vbsKind})
+			return
+		}
+
+		buf := dec.takeBytes(head.num)
 		if dec.err == nil {
 			v.SetBytes(buf)
 		}

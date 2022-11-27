@@ -42,11 +42,12 @@ func (e *InvalidUnmarshalError) Error() string {
 }
 
 type DataLackError struct {
-	Err error
+	Expect int64
+	Got int
 }
 
 func (e *DataLackError) Error() string {
-        return fmt.Sprintf("vbs: Need more data when decoding: %#v", e.Err)
+        return fmt.Sprintf("vbs: Need more data, expect %d, got %d", e.Expect, e.Got)
 }
 
 type InvalidVbsError struct {
@@ -54,6 +55,15 @@ type InvalidVbsError struct {
 
 func (e *InvalidVbsError) Error() string {
         return "vbs: Invalid vbs-encoded bytes"
+}
+
+type StringTooLongError struct {
+	Got int64
+	Max int
+}
+
+func (e *StringTooLongError) Error() string {
+        return fmt.Sprintf("vbs: String too long, got %d, max %d", e.Got, e.Max)
 }
 
 type IntegerOverflowError struct {

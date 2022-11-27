@@ -25,15 +25,15 @@ func equal(v1 any, v2 any) bool {
 }
 
 func testMarshal(t *testing.T, u any) {
-	got, err := Marshal(u)
+	buf, err := Marshal(u)
 	if err != nil {
-		t.Fatalf("error encoding %T: %v:", u, err)
+		t.Fatalf("error encoding %T: %#v", u, err)
 	}
 
 	pv := reflect.New(reflect.TypeOf(u))
-	err = Unmarshal(got, pv.Interface())
+	err = Unmarshal(buf, pv.Interface())
 	if err != nil {
-		t.Fatalf("error decoding %T: %v:", u, err)
+		t.Fatalf("error decoding %T: %#v", u, err)
 	}
 
 	v := pv.Elem().Interface()
@@ -82,6 +82,32 @@ func TestNil(t *testing.T) {
 
 	var x any
 	Marshal(x)
+}
+
+func TestDiscard(t *testing.T) {
+	type Q struct {
+		Con string `vbs:"con"`
+		Strftime map[string]string `vbs:"strftime"`
+		Time int `vbs:"time"`
+	}
+
+	type A struct {
+		Con string `vbs:"con"`
+		Strftime map[string]string
+		Time int `vbs:"time"`
+	}
+
+	q := Q{Con:"tcp/::1+5555/::1+58879", Strftime:map[string]string{"ctime":"Sun Nov 27 10:43:57 2022", "local":"221127u104357+08"}, Time:1669517037}
+	a := A{}
+
+	buf, err := Marshal(&q)
+	if err != nil {
+		t.Fatalf("error encoding %T: %#v", q, err)
+	}
+	err = Unmarshal(buf, &a)
+	if err != nil {
+		t.Fatalf("error decoding %T: %#v", a, err)
+	}
 }
 
 func TestMarshalFloat(t *testing.T) {
