@@ -1,10 +1,10 @@
 package vbs
 
 
-type Kind int8
+type VbsKind int8
 
 const (
-	VBS_INVALID Kind = 0x0
+	VBS_INVALID VbsKind = 0x0
 
 	VBS_TAIL	= 0x01         // Used to terminate list or dict.
 
@@ -69,7 +69,7 @@ var kindIdx = [VBS_INTEGER + 1]uint8{
          9,
 }
 
-func (k Kind) String() string {
+func (k VbsKind) String() string {
 	if k >= 0 && k <= VBS_INTEGER {
 		return kindNames[kindIdx[k]]
 	}

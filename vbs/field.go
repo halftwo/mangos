@@ -8,6 +8,7 @@ import (
 	"sync"
 	"strconv"
 	"math"
+	"bytes"
 )
 
 // _TagOptions is the string following a comma in a struct field's "json"
@@ -86,6 +87,23 @@ func (p FieldInfos) FindName(name string) *_FieldInfo {
 	}
 
 	if i >= len(p) || p[i].Name != name {
+		return nil
+	}
+	return &p[i]
+}
+
+func (p FieldInfos) FindNameBlob(name []byte) *_FieldInfo {
+	i, j := 0, len(p)
+	for i < j {
+		m := int(uint(i+j) >> 1) // avoid overflow
+		if bytes.Compare([]byte(p[m].Name), name) >= 0 {
+			j = m
+		} else {
+			i = m + 1
+		}
+	}
+
+	if i >= len(p) || !bytes.Equal([]byte(p[i].Name), name) {
 		return nil
 	}
 	return &p[i]

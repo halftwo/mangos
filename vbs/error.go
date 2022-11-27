@@ -84,7 +84,7 @@ func (e *ArrayLengthError) Error() string {
 
 
 type MismatchedKindError struct {
-	Expect, Got Kind
+	Expect, Got VbsKind
 }
 
 func (e *MismatchedKindError) Error() string {

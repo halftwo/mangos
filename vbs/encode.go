@@ -14,7 +14,7 @@ type Marshaler interface {
 
 type BytesPacker [16]byte
 
-func (bp *BytesPacker) packIntOrStringHead(n *int, kind Kind, num uint64) {
+func (bp *BytesPacker) packIntOrStringHead(n *int, kind VbsKind, num uint64) {
 	for ; num >= 0x20; *n++ {
 		bp[*n] = 0x80 | byte(num)
 		num >>= 7
@@ -55,7 +55,7 @@ func (bp *BytesPacker) PackDescriptor(n *int, descriptor uint16) {
 	}
 }
 
-func (bp *BytesPacker) PackKind(n *int, kind Kind, num uint64) {
+func (bp *BytesPacker) PackKind(n *int, kind VbsKind, num uint64) {
 	for ; num > 0; *n++ {
 		bp[*n] = 0x80 | byte(num)
 		num >>= 7
@@ -308,6 +308,24 @@ func (enc *Encoder) encodeNil() {
 	enc.writeByte(byte(VBS_NULL))
 }
 
+func (enc *Encoder) enterCompound(kind VbsKind) bool {
+	if enc.depth >= enc.maxDepth {
+		enc.err = xerr.Trace(&DepthOverflowError{enc.maxDepth})
+		return false
+	}
+	enc.depth++
+	enc.writeByte(byte(kind))
+	return true
+}
+
+func (enc *Encoder) leaveCompound() {
+	if enc.depth <= 0 {
+		panic("Can't reach here")
+	}
+	enc.depth--
+	enc.writeByte(byte(VBS_TAIL))
+}
+
 func (enc *Encoder) encodeList(v reflect.Value) {
 	isSlice := (v.Kind() == reflect.Slice)
 	if v.Type().Elem().Kind() == reflect.Uint8 {	// VBS_BLOB
@@ -328,13 +346,9 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 		return
 	}
 
-	enc.depth++
-	if enc.depth > enc.maxDepth {
-		enc.err = xerr.Trace(&DepthOverflowError{enc.maxDepth})
+	if !enc.enterCompound(VBS_LIST) {
 		return
 	}
-
-	enc.writeByte(byte(VBS_LIST))
 
 	n := v.Len()
 	for i := 0; i < n; i++ {
@@ -344,18 +358,13 @@ func (enc *Encoder) encodeList(v reflect.Value) {
 		}
 	}
 
-	enc.writeByte(byte(VBS_TAIL))
-	enc.depth--
+	enc.leaveCompound()
 }
 
 func (enc *Encoder) encodeMap(v reflect.Value) {
-	enc.depth++
-	if enc.depth > enc.maxDepth {
-		enc.err = xerr.Trace(&DepthOverflowError{enc.maxDepth})
+	if !enc.enterCompound(VBS_DICT) {
 		return
 	}
-
-	enc.writeByte(byte(VBS_DICT))
 
 	iter := v.MapRange()
 	for iter.Next() {
@@ -366,18 +375,13 @@ func (enc *Encoder) encodeMap(v reflect.Value) {
 		}
 	}
 
-	enc.writeByte(byte(VBS_TAIL))
-	enc.depth--
+	enc.leaveCompound()
 }
 
 func (enc *Encoder) encodeStruct(v reflect.Value) {
-	enc.depth++
-	if enc.depth >= enc.maxDepth {
-		enc.err = xerr.Trace(&DepthOverflowError{enc.maxDepth})
+	if !enc.enterCompound(VBS_DICT) {
 		return
 	}
-
-	enc.writeByte(byte(VBS_DICT))
 
 	fields := GetStructFieldInfos(v.Type())
 	for _, f := range fields {
@@ -397,8 +401,7 @@ func (enc *Encoder) encodeStruct(v reflect.Value) {
 		}
 	}
 
-	enc.writeByte(byte(VBS_TAIL))
-	enc.depth--
+	enc.leaveCompound()
 }
 
 

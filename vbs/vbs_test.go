@@ -30,8 +30,6 @@ func testMarshal(t *testing.T, u any) {
 		t.Fatalf("error encoding %T: %v:", u, err)
 	}
 
-	fmt.Printf("Marshal %T\t\t%v\n", u, len(got))
-
 	pv := reflect.New(reflect.TypeOf(u))
 	err = Unmarshal(got, pv.Interface())
 	if err != nil {
@@ -77,14 +75,13 @@ func benchmark(b *testing.B, u any) {
 
 func TestNil(t *testing.T) {
 	defer func() {
-		if x := recover(); x != nil {
-			fmt.Printf("panic: %v\n", x)
+		if x := recover(); x == nil {
+			t.Fatal("TestNil: failed")
 		}
 	}()
 
 	var x any
-	z, err := Marshal(x)
-	fmt.Println(z, err)
+	Marshal(x)
 }
 
 func TestMarshalFloat(t *testing.T) {
@@ -194,7 +191,6 @@ func testUnmarshalInterface(t *testing.T, u any) {
 	if err != nil {
 		t.Fatalf("error decoding %T: %v:", u, err)
 	}
-	fmt.Println(v)
 }
 
 func TestUnmarshalInterface(t *testing.T) {

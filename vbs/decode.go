@@ -8,6 +8,8 @@ import (
 	"halftwo/mangos/xerr"
 )
 
+const BLOCK_SIZE = 4096
+
 type Unmarshaler interface {
 	UnmarshalVbs([]byte) error
 }
@@ -29,7 +31,7 @@ type Decoder struct {
 	buffer []byte
 }
 
-func (dec *Decoder) readBlob(data []byte) (n int) {
+func (dec *Decoder) _read_blob(data []byte) (n int) {
 	if dec.err != nil {
 		return
 	}
@@ -230,6 +232,19 @@ func (dec *Decoder) left() int {
 	return (dec.maxLength - dec.size)
 }
 
+func (dec *Decoder) _bytesbuffer_next(num int) []byte {
+	if dec.unread {
+		dec.unread = false
+		err := dec.r.(*bytes.Buffer).UnreadByte()
+		if err != nil {
+			panic("Can't reach here")
+		}
+	}
+
+	dec.size += num
+	return dec.r.(*bytes.Buffer).Next(num)
+}
+
 func (dec *Decoder) _get_bytes(number int64, take bool) []byte {
 	if number > int64(dec.left()) || number > int64(dec.maxStrLen) {
 		dec.err = xerr.Trace(&DataLackError{})
@@ -237,27 +252,62 @@ func (dec *Decoder) _get_bytes(number int64, take bool) []byte {
 	}
 
 	num := int(number)
+	if num <= 0 {
+		return nil
+	}
+
 	if dec.nocopy {
-		dec.size += num
-		return dec.r.(*bytes.Buffer).Next(num)
+		return dec._bytesbuffer_next(num)
 	}
 
 	if take {
 		buf := make([]byte, 0, num)
-		k := dec.readBlob(buf[:num])
+		k := dec._read_blob(buf[:num])
 		return buf[:k]
 	}
 
 	if _, ok := dec.r.(*bytes.Buffer); ok {
-		dec.size += num
-		return dec.r.(*bytes.Buffer).Next(num)
+		return dec._bytesbuffer_next(num)
 	}
 
 	if cap(dec.buffer) < num {
 		dec.buffer = make([]byte, 0, num)
 	}
-	k := dec.readBlob(dec.buffer[:num])
+	k := dec._read_blob(dec.buffer[:num])
 	return dec.buffer[:k]
+}
+
+func min[T ~int|~int64](a, b T) T {
+	if a <= b {
+		return a
+	}
+	return b
+}
+
+func (dec *Decoder) discardBytes(number int64) {
+	if number > int64(dec.left()) || number > int64(dec.maxStrLen) {
+		dec.err = xerr.Trace(&DataLackError{})
+		return
+	}
+
+	num := int(number)
+	if num <= 0 {
+		return
+	}
+
+	if _, ok := dec.r.(*bytes.Buffer); ok {
+		dec._bytesbuffer_next(num)
+	}
+
+	bufcap := min(BLOCK_SIZE, num)
+	if cap(dec.buffer) < bufcap {
+		dec.buffer = make([]byte, 0, bufcap)
+	}
+	for num > 0 && dec.err == nil {
+		k := min(bufcap, num)
+		num -= k
+		dec._read_blob(dec.buffer[:k])
+	}
 }
 
 func (dec *Decoder) getBytes(number int64) []byte {
@@ -275,7 +325,7 @@ func (dec *Decoder) copyBytes(buf []byte) int {
 		return 0
 	}
 
-	k := dec.readBlob(buf)
+	k := dec._read_blob(buf)
 	return k
 }
 
@@ -412,16 +462,16 @@ func bitmapTestMulti(x uint8) bool {
 }
 
 type _HeadInfo struct {
-	kind Kind
+	vbsKind VbsKind
 	descriptor uint16
 	num int64
 }
 
-func (dec *Decoder) unpackHeadKind(kind Kind, permitDescriptor bool) (head _HeadInfo) {
+func (dec *Decoder) unpackHeadKind(vbsKind VbsKind, permitDescriptor bool) (head _HeadInfo) {
 	head = dec.unpackHead()
 	if dec.err == nil {
-		if head.kind != kind {
-			dec.err = xerr.Trace(&MismatchedKindError{Expect:kind, Got:head.kind})
+		if head.vbsKind != vbsKind {
+			dec.err = xerr.Trace(&MismatchedKindError{Expect:vbsKind, Got:head.vbsKind})
 		} else if (!permitDescriptor && head.descriptor != 0) {
 			dec.err = xerr.Trace(&InvalidVbsError{})
 		}
@@ -435,7 +485,7 @@ func (dec *Decoder) unpackHead() (head _HeadInfo) {
 	}
 
 	negative := false
-	kind := byte(0)
+	vbsKind := byte(0)
 	descriptor := uint16(0)
 	num := uint64(0)
 again:
@@ -446,17 +496,17 @@ again:
 		}
 
 		if x < 0x80 {
-			kind = x
+			vbsKind = x
 			if x >= VBS_STRING {
-				kind = (x & 0x60)
+				vbsKind = (x & 0x60)
                                 num = uint64(x & 0x1F)
-				if kind == 0x60 {
-					kind = VBS_INTEGER
+				if vbsKind == 0x60 {
+					vbsKind = VBS_INTEGER
 					negative = true
 				}
 			} else if x >= VBS_BOOL {
 				if x != VBS_BLOB {
-					kind = (x & 0xFE)
+					vbsKind = (x & 0xFE)
 				}
 				if x <= VBS_BOOL + 1 {
 					num = uint64(x & 0x01)
@@ -509,9 +559,9 @@ again:
 				num |= uint64(x) << uint(shift)
 			}
 
-			kind = x
+			vbsKind = x
 			if x >= VBS_STRING {
-				kind = (x & 0x60)
+				vbsKind = (x & 0x60)
 				x &= 0x1F
 				if x != 0 {
 					left := 64 - shift
@@ -521,12 +571,12 @@ again:
 					}
 					num |= uint64(x) << uint(shift)
 				}
-				if kind == 0x60 {
-					kind = VBS_INTEGER
+				if vbsKind == 0x60 {
+					vbsKind = VBS_INTEGER
 					negative = true
 				}
 			} else if x >= VBS_DECIMAL {
-                                kind = (x & 0xFE)
+                                vbsKind = (x & 0xFE)
                                 negative = (x & 0x01) != 0
 			} else if x >= VBS_DESCRIPTOR && x < VBS_BOOL {
 				x &= 0x07
@@ -558,14 +608,14 @@ again:
 
 			if num > math.MaxInt64 {
 				/* overflow */
-				if !(kind == VBS_INTEGER && negative && int64(num) == math.MinInt64) {
+				if !(vbsKind == VBS_INTEGER && negative && int64(num) == math.MinInt64) {
 					dec.err = xerr.Trace(&NumberOverflowError{64})
 					return
 				}
 			}
 		}
 
-		head.kind = Kind(kind)
+		head.vbsKind = VbsKind(vbsKind)
 		head.descriptor = descriptor
 		head.num = int64(num)
 		if negative {
@@ -581,10 +631,7 @@ again:
 func (dec *Decoder) unpackHeadOfList() (head _HeadInfo) {
 	head = dec.unpackHeadKind(VBS_LIST, true)
 	if dec.err == nil {
-		dec.depth++
-		if dec.depth > dec.maxDepth {
-			dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
-		}
+		dec.enterCompound()
 	}
 	return
 }
@@ -592,10 +639,7 @@ func (dec *Decoder) unpackHeadOfList() (head _HeadInfo) {
 func (dec *Decoder) unpackHeadOfDict() (head _HeadInfo) {
 	head = dec.unpackHeadKind(VBS_DICT, true)
 	if dec.err == nil {
-		dec.depth++
-		if dec.depth > dec.maxDepth {
-			dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
-		}
+		dec.enterCompound()
 	}
 	return
 }
@@ -622,6 +666,15 @@ func (dec *Decoder) unpackIfTail() bool {
 		dec.unreadByte()
 	}
 	return false
+}
+
+func (dec *Decoder) enterCompound() bool {
+	if dec.depth >= dec.maxDepth {
+		dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
+		return false
+	}
+	dec.depth++
+	return true
 }
 
 type _DecodeFunc func (dec *Decoder, v reflect.Value)
@@ -681,10 +734,10 @@ func (dec *Decoder) unpackByteSlice() (buf []byte) {
 		return
 	}
 
-	if head.kind == VBS_BLOB || head.kind == VBS_STRING {
+	if head.vbsKind == VBS_BLOB || head.vbsKind == VBS_STRING {
 		buf = dec.takeBytes(head.num)
 	} else {
-		dec.err = xerr.Trace(&MismatchedKindError{Expect:VBS_BLOB, Got:head.kind})
+		dec.err = xerr.Trace(&MismatchedKindError{Expect:VBS_BLOB, Got:head.vbsKind})
 	}
 	return
 }
@@ -702,9 +755,9 @@ func (dec *Decoder) unpackFloat() (r float64) {
 		return
 	}
 
-	if head.kind == VBS_INTEGER {
+	if head.vbsKind == VBS_INTEGER {
 		r = float64(head.num)
-	} else if head.kind == VBS_FLOATING {
+	} else if head.vbsKind == VBS_FLOATING {
 		head2 := dec.unpackHeadKind(VBS_INTEGER, false)
 		if dec.err == nil {
 			mantissa := head.num
@@ -712,7 +765,7 @@ func (dec *Decoder) unpackFloat() (r float64) {
 			r = makeFloat(mantissa, expo)
 		}
 	} else {
-		dec.err = xerr.Trace(&MismatchedKindError{Expect:VBS_FLOATING, Got:head.kind})
+		dec.err = xerr.Trace(&MismatchedKindError{Expect:VBS_FLOATING, Got:head.vbsKind})
 	}
 	return
 }
@@ -781,7 +834,7 @@ func (dec *Decoder) decodeSliceValue(v reflect.Value) {
 
 	head := dec.unpackHeadOfList()
 	if dec.err != nil {
-		if head.kind == VBS_NULL {
+		if head.vbsKind == VBS_NULL {
 			// No error, leave the v alone
 			dec.err = nil
 		}
@@ -816,7 +869,7 @@ func (dec *Decoder) decodeSliceValue(v reflect.Value) {
 func (dec *Decoder) decodeMapValue(v reflect.Value) {
 	head := dec.unpackHeadOfDict()
 	if dec.err != nil {
-		if head.kind == VBS_NULL {
+		if head.vbsKind == VBS_NULL {
 			// No error, leave the v alone
 			dec.err = nil
 		}
@@ -861,30 +914,61 @@ func (dec *Decoder) decodeStructValue(v reflect.Value) {
 			break
 		}
 
-		key := dec.decodeAny()
+		head := dec.unpackHead()
 		if dec.err != nil {
 			return
 		}
 
 		var f *_FieldInfo
-		switch x := key.(type) {
-		case int64:
-			f = fields.FindInt(x)
-		case string:
-			f = fields.FindName(x)
+		switch head.vbsKind {
+		case VBS_INTEGER:
+			f = fields.FindInt(head.num)
+
+		case VBS_STRING:
+			buf := dec.getBytes(head.num)
+			f = fields.FindNameBlob(buf)
 		default:
-			dec.err = xerr.Trace(&InvalidUnmarshalError{reflect.TypeOf(x)})
+			dec.err = xerr.Trace(&MismatchedKindError{Expect:VBS_STRING, Got:head.vbsKind})
 			return
 		}
 
 		if f == nil {
 			// unknown field, discard value
-			dec.decodeAny()
+			dec.discardAny()
 			continue
 		}
 
 		dec.decodeReflectValue(v.Field(int(f.Idx)))
 	}
+}
+
+func (dec *Decoder) discardAny() {
+	head := dec.unpackHead()
+	if dec.err != nil {
+		return
+	}
+
+	switch head.vbsKind {
+	case VBS_STRING, VBS_BLOB:
+		dec.discardBytes(head.num)
+
+	case VBS_FLOATING, VBS_DECIMAL:
+		dec.unpackHeadKind(VBS_INTEGER, false)
+
+	case VBS_LIST:
+		dec.discardAnySlice()
+
+	case VBS_DICT:
+		dec.discardAnyMap()
+
+	case VBS_INTEGER, VBS_BOOL, VBS_NULL:
+		/* Do nothing */
+
+	default:
+		dec.err = xerr.Trace(&InvalidVbsError{})
+	}
+
+	return
 }
 
 func (dec *Decoder) decodeAny() (x any) {
@@ -893,7 +977,7 @@ func (dec *Decoder) decodeAny() (x any) {
 		return
 	}
 
-	switch head.kind {
+	switch head.vbsKind {
 	case VBS_INTEGER:
 		x = head.num
 
@@ -940,10 +1024,22 @@ func (dec *Decoder) decodeAny() (x any) {
 	return
 }
 
+func (dec *Decoder) discardAnySlice() {
+	if !dec.enterCompound() {
+		return
+	}
+
+	for dec.err == nil {
+		if dec.unpackIfTail() {
+			break
+		}
+
+		dec.discardAny()
+	}
+}
+
 func (dec *Decoder) decodeAnySlice() (r any) {
-	dec.depth++
-	if dec.depth > dec.maxDepth {
-		dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
+	if !dec.enterCompound() {
 		return
 	}
 
@@ -964,10 +1060,23 @@ func (dec *Decoder) decodeAnySlice() (r any) {
 	return
 }
 
+func (dec *Decoder) discardAnyMap() {
+	if !dec.enterCompound() {
+		return
+	}
+
+	for dec.err == nil {
+		if dec.unpackIfTail() {
+			break
+		}
+
+		dec.discardAny()
+		dec.discardAny()
+	}
+}
+
 func (dec *Decoder) decodeAnyMap() (r any) {
-	dec.depth++
-	if dec.depth > dec.maxDepth {
-		dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
+	if !dec.enterCompound() {
 		return
 	}
 
