@@ -14,9 +14,9 @@ const BUFFER_SIZE = 4096
 type Decoder struct {
 	r io.Reader
 	size int
-	maxLength int
-	maxStrLen int
-	maxDepth int16
+	MaxLength int	// max length of the VBS encoded data, default vbs.MaxLength
+	MaxStrLen int	// max length of string and blob in the VBS encoded data, default vbs.MaxStringLength
+	MaxDepth int16 	// max depth of VBS dict and list, default vbs.MaxDepth
 	depth int16
 	finished bool
 	nocopy bool
@@ -62,7 +62,7 @@ func (dec *Decoder) _read_blob(data []byte) (n int) {
 	}
 
 	dec.size += n
-	if dec.size == dec.maxLength {
+	if dec.size == dec.MaxLength {
 		dec.finished = true
 	}
 	return
@@ -80,7 +80,7 @@ func (dec *Decoder) readByte() byte {
 		if err == nil {
 			dec.lastByte = buf[0]
 			dec.size++
-			if dec.size == dec.maxLength {
+			if dec.size == dec.MaxLength {
 				dec.finished = true
 			}
 			return dec.lastByte
@@ -115,61 +115,20 @@ func Unmarshal(buf []byte, v any) (n int, err error) {
 // NewDecoder returns a Decoder that decodes VBS from input stream r
 func NewDecoder(r io.Reader) *Decoder {
 	if b, ok := r.(*bytes.Buffer); ok {
-		dec := NewDecoderLength(r, b.Len())
-		dec.buffer = b.Bytes()
-		return dec
+		return NewDecoderLength(r, b.Len())
 	}
 	return NewDecoderLength(r, MaxLength)
 }
 
-// The decoded []byte (vbs blob) from the buf owns the buf. 
-// Don't change the content of buf before the decoded []byte is unused.
-func NewDecoderBytes(buf []byte) *Decoder {
+// If owner is true, the Decoder owns the buf, the decoded []byte (vbs blob) 
+// points to the buf (i.e. not copied from the buf).
+func NewDecoderBytes(buf []byte, owner bool) *Decoder {
 	r := bytes.NewBuffer(buf)
-	dec := NewDecoderLength(r, len(buf))
-	dec.buffer = buf
-	dec.nocopy = true
-	return dec
+	return &Decoder{r:r, MaxLength:len(buf), MaxStrLen:MaxStringLength, MaxDepth:MaxDepth, nocopy:owner}
 }
 
 func NewDecoderLength(r io.Reader, maxLength int) *Decoder {
-	if maxLength <= 0 {
-		maxLength = MaxLength
-	}
-	maxString := MaxStringLength
-	if maxString >= maxLength {
-		maxString = maxLength - 1
-	}
-
-	return &Decoder{r:r, maxLength:maxLength, maxStrLen:maxString, maxDepth:MaxDepth}
-}
-
-func (dec *Decoder) SetMaxLength(length int) {
-	if length <= 0 {
-		dec.maxLength = MaxLength
-	} else {
-		dec.maxLength = length
-	}
-}
-
-// SetMaxStringLength sets the max length of string and blob in the VBS encoded data
-func (dec *Decoder) SetMaxStringLength(length int) {
-	if length <= 0 {
-		dec.maxStrLen = MaxStringLength
-	} else {
-		dec.maxStrLen = length
-	}
-}
-
-// SetMaxDepth sets the max depth of VBS dict and list
-func (dec *Decoder) SetMaxDepth(depth int) {
-	if depth < 0 {
-		dec.maxDepth = MaxDepth
-	} else if depth > math.MaxInt16 {
-		dec.maxDepth = math.MaxInt16
-	} else {
-		dec.maxDepth = int16(depth)
-	}
+	return &Decoder{r:r, MaxLength:maxLength, MaxStrLen:MaxStringLength, MaxDepth:MaxDepth}
 }
 
 
@@ -210,7 +169,7 @@ func (dec *Decoder) Size() int {
 }
 
 func (dec *Decoder) left() int {
-	return (dec.maxLength - dec.size)
+	return (dec.MaxLength - dec.size)
 }
 
 func (dec *Decoder) _bytesbuffer_next(num int) []byte {
@@ -231,8 +190,8 @@ func (dec *Decoder) _bytesbuffer_next(num int) []byte {
 }
 
 func (dec *Decoder) _get_bytes(number int64, take bool) []byte {
-	if number > int64(dec.maxStrLen) {
-		dec.err = xerr.Trace(&StringTooLongError{Got:number, Max:dec.maxStrLen})
+	if number > int64(dec.MaxStrLen) {
+		dec.err = xerr.Trace(&StringTooLongError{Got:number, Max:dec.MaxStrLen})
 		return nil
 	}
 
@@ -270,8 +229,8 @@ func min[T ~int|~int64](a, b T) T {
 }
 
 func (dec *Decoder) discardBytes(number int64) {
-	if number > int64(dec.maxStrLen) {
-		dec.err = xerr.Trace(&StringTooLongError{Got:number, Max:dec.maxStrLen})
+	if number > int64(dec.MaxStrLen) {
+		dec.err = xerr.Trace(&StringTooLongError{Got:number, Max:dec.MaxStrLen})
 	}
 
 	num := int(number)
@@ -634,8 +593,8 @@ func (dec *Decoder) unpackIfTail() bool {
 }
 
 func (dec *Decoder) enterCompound() bool {
-	if dec.depth >= dec.maxDepth {
-		dec.err = xerr.Trace(&DepthOverflowError{dec.maxDepth})
+	if dec.depth >= dec.MaxDepth {
+		dec.err = xerr.Trace(&DepthOverflowError{dec.MaxDepth})
 		return false
 	}
 	dec.depth++

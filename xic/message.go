@@ -261,7 +261,7 @@ type _InMsg struct {
 }
 
 func (m *_InMsg) DecodeArgs(args any) error {
-	dec := vbs.NewDecoderBytes(m.buf[m.argsOff:])
+	dec := vbs.NewDecoderBytes(m.buf[m.argsOff:], true)
 	err := dec.Decode(args)
 	if err != nil {
 		return err
@@ -278,7 +278,7 @@ type _InCheck struct {
 
 func newInCheck(buf []byte) *_InCheck {
 	c := &_InCheck{}
-	dec := vbs.NewDecoderBytes(buf)
+	dec := vbs.NewDecoderBytes(buf, true)
 	dec.Decode(&c.cmd)
 	c.argsOff = dec.Size()
 	c.buf = buf
@@ -299,7 +299,7 @@ type _InQuest struct {
 
 func newInQuest(buf []byte) *_InQuest {
 	q := &_InQuest{}
-	dec := vbs.NewDecoderBytes(buf)
+	dec := vbs.NewDecoderBytes(buf, true)
 	dec.Decode(&q.txid)
 	dec.Decode(&q.service)
 	dec.Decode(&q.method)
@@ -321,7 +321,7 @@ type _InAnswer struct {
 
 func newInAnswer(buf []byte) *_InAnswer {
 	a := &_InAnswer{}
-	dec := vbs.NewDecoderBytes(buf)
+	dec := vbs.NewDecoderBytes(buf, true)
 	dec.Decode(&a.txid)
 	dec.Decode(&a.status)
 	a.argsOff = dec.Size()
