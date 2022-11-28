@@ -8,10 +8,6 @@ import (
 	"halftwo/mangos/xerr"
 )
 
-type Marshaler interface {
-	MarshalVbs() ([]byte, error)
-}
-
 type BytesPacker [16]byte
 
 func (bp *BytesPacker) packIntOrStringHead(n *int, kind VbsKind, num uint64) {
@@ -197,19 +193,6 @@ func (enc *Encoder) encodeReflectValue(v reflect.Value) {
 	if enc.err != nil {
 		return
 	}
-
-	/* TODO: shall we use the Marshaler's MarshalVbs() method?
-	if m, ok := v.Interface().(Marshaler); ok {
-		b, err := m.MarshalVbs()
-		if err != nil {
-			enc.err = err
-		} else {
-			// TODO check b is valid encoded
-			enc.write(b)
-		}
-		return
-	}
-	*/
 
 	if d, ok := v.Interface().(Decimal64); ok {
 		enc.encodeDecimal64(d)

@@ -31,8 +31,8 @@ func testMarshal(t *testing.T, u any) {
 	}
 
 	pv := reflect.New(reflect.TypeOf(u))
-	err = Unmarshal(buf, pv.Interface())
-	if err != nil {
+	n, err := Unmarshal(buf, pv.Interface())
+	if err != nil || n != len(buf) {
 		t.Fatalf("error decoding %T: %#v", u, err)
 	}
 
@@ -104,8 +104,8 @@ func TestDiscard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error encoding %T: %#v", q, err)
 	}
-	err = Unmarshal(buf, &a)
-	if err != nil {
+	n, err := Unmarshal(buf, &a)
+	if err != nil || n != len(buf) {
 		t.Fatalf("error decoding %T: %#v", a, err)
 	}
 }
@@ -207,14 +207,14 @@ func BenchmarkStructIntKey(b *testing.B) {
 }
 
 func testUnmarshalInterface(t *testing.T, u any) {
-	got, err := Marshal(u)
+	buf, err := Marshal(u)
 	if err != nil {
 		t.Fatalf("error encoding %T: %v:", u, err)
 	}
 
 	var v any
-	err = Unmarshal(got, &v)
-	if err != nil {
+	n, err := Unmarshal(buf, &v)
+	if err != nil || n != len(buf) {
 		t.Fatalf("error decoding %T: %v:", u, err)
 	}
 }

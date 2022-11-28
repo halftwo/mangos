@@ -8,12 +8,7 @@ import (
 	"halftwo/mangos/xerr"
 )
 
-const BLOCK_SIZE = 4096
-
-type Unmarshaler interface {
-	UnmarshalVbs([]byte) error
-}
-
+const BUFFER_SIZE = 4096
 
 // A Decoder reads and decodes VBS values from an input stream.
 type Decoder struct {
@@ -108,23 +103,13 @@ func (dec *Decoder) unreadByte() {
 }
 
 // Unmarshal decodes the VBS-encoded data and stores the result in the value pointed to by v.
+// Return consumed number of bytes
 // If v is nil or not a pointer, Unmarshal returns an InvalidUnmarshalError.
-func Unmarshal(buf []byte, v any) error {
-	rest, err := UnmarshalOneItem(buf, v)
-	if err != nil {
-		return err
-	}
-	if len(rest) > 0 {
-		return &ExtraDataLeftError{}
-	}
-	return nil
-}
-
-func UnmarshalOneItem(buf []byte, v any) (rest []byte, err error) {
-	dec := NewDecoderBytes(buf)
+func Unmarshal(buf []byte, v any) (n int, err error) {
+	r := bytes.NewBuffer(buf)
+	dec := NewDecoderLength(r, len(buf))
 	dec.Decode(v)
-	b := dec.r.(*bytes.Buffer)
-	return b.Bytes(), dec.err
+	return dec.size, dec.err
 }
 
 // NewDecoder returns a Decoder that decodes VBS from input stream r
@@ -299,7 +284,7 @@ func (dec *Decoder) discardBytes(number int64) {
 		return
 	}
 
-	bufcap := min(BLOCK_SIZE, num)
+	bufcap := min(BUFFER_SIZE, num)
 	if cap(dec.buffer) < bufcap {
 		dec.buffer = make([]byte, 0, bufcap)
 	}
@@ -322,15 +307,6 @@ func (dec *Decoder) decodeReflectValue(v reflect.Value) {
 	if dec.err != nil {
 		return
 	}
-
-	/* TODO: shall we use the Unmarshaler's UnmarshalVbs() method?
-	if m, ok := v.Interface().(Unmarshaler); ok {
-		// TODO get the []byte
-		b := []byte{}
-		dec.err = m.UnmarshalVbs(b)
-		return
-	}
-	*/
 
 	var decode _DecodeFunc
 	switch v.Kind() {
