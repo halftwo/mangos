@@ -3,6 +3,7 @@ package xic
 import (
 	"fmt"
 	"math"
+	"bytes"
 	"strings"
 	"strconv"
 
@@ -90,10 +91,14 @@ func (ei *EndpointInfo) Address() string {
 }
 
 func (ei *EndpointInfo) String() string {
-	ep := fmt.Sprintf("@%s+%s+%d", ei.proto, ei.host, ei.port)
+	b := &bytes.Buffer{}
+	fmt.Fprintf(b, "@%s+%s+%d", ei.proto, ei.host, ei.port)
 	if ei.timeout > 0 || ei.closeTimeout > 0 || ei.connectTimeout > 0 {
-		ep += fmt.Sprintf(" timeout=%d,%d,%d", ei.timeout, ei.closeTimeout, ei.connectTimeout)
+		fmt.Fprintf(b, " timeout=%d", ei.timeout)
+		if ei.closeTimeout > 0 || ei.connectTimeout > 0 {
+			fmt.Fprintf(b, ",%d,%d", ei.closeTimeout, ei.connectTimeout)
+		}
 	}
-	return ep
+	return b.String()
 }
 
