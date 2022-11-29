@@ -54,6 +54,7 @@ type _Connection struct {
 	state		_ConState
 	incoming        bool
 	closed		bool
+	id		string
 	engine          *_Engine
 	adapter         atomic.Value // Adapter
 	serviceHint     string
@@ -104,6 +105,7 @@ func (q *OutMsgQueue) PopFront() _OutMessage {
 
 func _newConnection(engine *_Engine, incoming bool) *_Connection {
 	con := &_Connection{
+		id: GenerateRandomBase57Id(23),
 		engine: engine,
 		incoming: incoming,
 		maxQ: DEFAULT_CONNECTION_MAXQ,
@@ -176,6 +178,7 @@ func (con *_Connection) String() string {
 }
 
 func (con *_Connection) IsLive() bool { return con.state <= con_ACTIVE }
+func (con *_Connection) Id() string { return con.id }
 func (con *_Connection) Incoming() bool { return con.incoming }
 func (con *_Connection) Timeout() uint32 { return uint32(con.timeout / time.Millisecond) }
 func (con *_Connection) Endpoint() string { return con.endpoint.String() }
@@ -254,7 +257,7 @@ func (con *_Connection) close_and_reply(retryable bool) {
 	}
 }
 
-func (con *_Connection) CreateProxy(service string) (Proxy, error) {
+func (con *_Connection) CreateFixedProxy(service string) (Proxy, error) {
 	if strings.IndexByte(service, '@') >= 0 {
 		return nil, errors.New("Service name can't contain '@'")
 	}
@@ -263,8 +266,9 @@ func (con *_Connection) CreateProxy(service string) (Proxy, error) {
 		con.pending = make(map[int64]*_Result)
 	}
 	con.mutex.Unlock()
-	prx, err := con.engine.makeFixedProxy(service, con)
-	return prx, err
+
+	prx := newProxyWithConnection(con.engine, service, con)
+	return prx, nil
 }
 
 func (con *_Connection) Adapter() Adapter {

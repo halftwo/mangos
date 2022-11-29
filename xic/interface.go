@@ -73,7 +73,7 @@ type Setting interface {
 type Engine interface {
 	Setting() Setting
 	Name() string
-	Id() string
+	Id() string		// universal unique
 
 	CreateAdapter(name string) (Adapter, error)
 	CreateAdapterEndpoints(name string, endpoints string) (Adapter, error)
@@ -181,8 +181,9 @@ type Proxy interface {
 
 type Connection interface {
 	String() string
+	Id() string		// universal unique
 	Close(force bool)
-	CreateProxy(service string) (Proxy, error)
+	CreateFixedProxy(service string) (Proxy, error)
 
 	Adapter() Adapter
 	SetAdapter(adapter Adapter)

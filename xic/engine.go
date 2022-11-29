@@ -169,7 +169,7 @@ func (engine *_Engine) CreateAdapterEndpoints(name string, endpoints string) (Ad
 }
 
 func (engine *_Engine) CreateSlackAdapter() (Adapter, error) {
-	adapter, err := newAdapter(engine, "", "")
+	adapter, err := newAdapter(engine, ".slack", "")
 	if err != nil {
 		return nil, err
 	}
@@ -291,25 +291,6 @@ func (engine *_Engine) wait_for_shutting_routine() {
 	engine.state = eng_SHUTTED
 	engine.cond.Broadcast()
 	engine.mutex.Unlock()
-}
-
-func (engine *_Engine) makeFixedProxy(service string, con *_Connection) (Proxy, error) {
-	engine.mutex.Lock()
-	defer engine.mutex.Unlock()
-	if engine.state != eng_ACTIVE {
-		return nil, ErrEngineShutted
-	}
-
-	prx, ok := engine.proxyMap[service]
-	if ok {
-		if prx.fixed && prx.cons[0] == con {
-			return prx, nil
-		}
-	}
-
-	prx = newProxyWithConnection(engine, service, con)
-	engine.proxyMap[service] = prx
-	return prx, nil
 }
 
 func (engine *_Engine) makeConnection(serviceHint string, endpoint string) (*_Connection, error) {
