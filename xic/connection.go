@@ -20,21 +20,6 @@ import (
 	"halftwo/mangos/srp6a"
 )
 
-type _Current struct {
-	_InQuest
-	con *_Connection
-}
-
-func newCurrent(con *_Connection, q *_InQuest) *_Current {
-	return &_Current{_InQuest: *q, con: con}
-}
-
-func (cur *_Current) Txid() int64	{ return cur.txid }
-func (cur *_Current) Service() string	{ return cur.service }
-func (cur *_Current) Method() string	{ return cur.method }
-func (cur *_Current) Ctx() Context	{ return cur.ctx }
-func (cur *_Current) Con() Connection	{ return cur.con }
-
 type _ConState int32
 const (
 	con_INIT	_ConState = iota
@@ -751,8 +736,8 @@ func checkHeader(header _MessageHeader) error {
 	case QuestMsgType, AnswerMsgType, CheckMsgType:
 		if (header.Flags &^ FLAG_MASK) != 0 {
 			return errors.New("Unknown message Flags")
-		} else if header.BodySize > MaxMessageSize {
-			if (header.Flags & FLAG_CIPHER) == 0 || header.BodySize - CipherMacSize > MaxMessageSize {
+		} else if int(header.BodySize) > MaxMessageSize {
+			if (header.Flags & FLAG_CIPHER) == 0 || int(header.BodySize) - CipherMacSize > MaxMessageSize {
 				return errors.New("Message size too large")
 			}
 		}

@@ -2,7 +2,7 @@ package xic
 
 import (
 	"sync"
-	"path"
+	"path/filepath"
 	"fmt"
 	"os"
 	"bufio"
@@ -139,19 +139,19 @@ func (st *_Setting) FloatDefault(name string, dft float64) float64 {
 func (st *_Setting) Pathname(name string) string {
 	s := st.Get(name)
 	if len(s) == 0 || s[0] == '/' {
-		return s
+		return filepath.FromSlash(s)
 	}
 
-	return path.Join(path.Dir(st.filename), s)
+	return filepath.Join(filepath.Dir(st.filename), filepath.FromSlash(s))
 }
 
 func (st *_Setting) PathnameDefault(name string, dft string) string {
 	s := st.GetDefault(name, dft)
 	if len(s) == 0 || s[0] == '/' {
-		return s
+		return filepath.FromSlash(s)
 	}
 
-	return path.Join(path.Dir(st.filename), s)
+	return filepath.Join(filepath.Dir(st.filename), filepath.FromSlash(s))
 }
 
 func (st *_Setting) StringSlice(name string) []string {
@@ -176,5 +176,4 @@ func (st *_Setting) StringSlice(name string) []string {
 	}
 	return array
 }
-
 
