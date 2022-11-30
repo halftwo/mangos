@@ -21,7 +21,7 @@ func NewSetting() Setting {
 
 func NewSettingFile(filename string) (Setting, error) {
 	st := NewSetting()
-	err := st.LoadFile(filename)
+	err := st.LoadFile(filepath.FromSlash(filename))
 	if err != nil {
 		return nil, err
 	}
@@ -137,21 +137,15 @@ func (st *_Setting) FloatDefault(name string, dft float64) float64 {
 }
 
 func (st *_Setting) Pathname(name string) string {
-	s := st.Get(name)
-	if len(s) == 0 || s[0] == '/' {
-		return filepath.FromSlash(s)
-	}
-
-	return filepath.Join(filepath.Dir(st.filename), filepath.FromSlash(s))
+	return st.PathnameDefault(name, "")
 }
 
 func (st *_Setting) PathnameDefault(name string, dft string) string {
-	s := st.GetDefault(name, dft)
-	if len(s) == 0 || s[0] == '/' {
-		return filepath.FromSlash(s)
+	s := filepath.FromSlash(st.GetDefault(name, dft))
+	if filepath.IsAbs(s) {
+		return s
 	}
-
-	return filepath.Join(filepath.Dir(st.filename), filepath.FromSlash(s))
+	return filepath.Join(filepath.Dir(st.filename), s)
 }
 
 func (st *_Setting) StringSlice(name string) []string {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"path/filepath"
 	"os/signal"
 	"sync/atomic"
 )
@@ -69,7 +68,7 @@ func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalH
 
 	configFile, cfs, args := parseArgs()
 	if configFile != "" {
-		err := setting.LoadFile(filepath.FromSlash(configFile))
+		err := setting.LoadFile(configFile)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "ERROR:", err)
 			return err
