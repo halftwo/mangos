@@ -1,7 +1,6 @@
 package xic
 
 import (
-	"math"
 	"math/rand"
 	crand "crypto/rand"
 	"encoding/hex"
@@ -41,20 +40,6 @@ func GenerateRandomUuid() string {
 }
 
 func GenerateRandomBase57Id(n int) string {
-	if n < 1 {
-		panic("length of id must be greater than 1")
-	}
-
-	m := xbase57.StdEncoding.DecodedLen(n) + 1
-	if m < 4 {
-		m = 4
-	}
-	src := make([]byte, m)
-	dst := make([]byte, n)
-	crand.Read(src)
-	k := xbase57.StdEncoding.Encode(dst, src)
-	u32 := binary.BigEndian.Uint32(src[:4])
-	dst[0] = xbase57.StdAlphabet[u32/(math.MaxUint32/49+1)]
-	return string(dst[:k])
+	return xbase57.RandomId(n, crand.Read)
 }
 

@@ -3,6 +3,8 @@ package xbase57
 import (
 	"io"
 	"strconv"
+	"math"
+	"encoding/binary"
 )
 
 const StdAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
@@ -442,5 +444,32 @@ func (d *_Decoder) Read(p []byte) (n int, err error) {
 	}
 
 	return n, d.err
+}
+
+type RandomSourceFunction func ([]byte)(int, error)
+
+// The first char of the returned string is always a letter instead of digit
+func RandomId(n int, rnd RandomSourceFunction) string {
+        if n < 1 {
+                panic("length of id must be greater than 1")
+        }
+
+        m := StdEncoding.DecodedLen(n) + 1
+        if m < 4 {
+                m = 4
+        }
+
+        src := make([]byte, m)
+	k := 0
+	for k < m {
+		i, _ := rnd(src[k:])
+		k += i
+	}
+
+        dst := make([]byte, n)
+        k = StdEncoding.Encode(dst, src)
+        u32 := binary.BigEndian.Uint32(src[:4])
+        dst[0] = StdAlphabet[u32/(math.MaxUint32/49+1)]
+        return string(dst[:k])
 }
 

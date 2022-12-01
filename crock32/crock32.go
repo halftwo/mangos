@@ -2,7 +2,11 @@
 // Douglas Crockford in http://www.crockford.com/wrmg/base32.html
 package crock32
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+	"encoding/binary"
+)
 
 const AlphabetUpper = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
@@ -288,5 +292,32 @@ func DammChecksum(in []byte) int {
 
 func DammValidate(in []byte) bool {
 	return DammChecksum(in) == 0
+}
+
+type RandomSourceFunction func ([]byte)(int, error)
+
+// The first char of the returned string is always a letter instead of digit
+func RandomId(n int, rnd RandomSourceFunction) string {
+        if n < 1 {
+                panic("length of id must be greater than 1")
+        }
+
+        m := DecodedLen(n) + 1
+        if m < 4 {
+                m = 4
+        }
+
+        src := make([]byte, m)
+	k := 0
+	for k < m {
+		i, _ := rnd(src[k:])
+		k += i
+	}
+
+        dst := make([]byte, n)
+        k = EncodeLower(dst, src)
+        u32 := binary.BigEndian.Uint32(src[:4])
+        dst[0] = AlphabetLower[10 + u32/(math.MaxUint32/22+1)]
+        return string(dst[:k])
 }
 
