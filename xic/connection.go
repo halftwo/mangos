@@ -119,7 +119,7 @@ func (con *_Connection) _set_timeouts(ei *EndpointInfo) {
 func newOutgoingConnection(engine *_Engine, serviceHint string, ei *EndpointInfo) *_Connection {
 	con := _newConnection(engine, false)
 	con.endpoint = ei
-	con.adapter.Store(engine.getSlackAdapter())
+	con.adapter.Store(engine.slackAdapter)
 
 	con._set_timeouts(ei)
 	go con.client_run()

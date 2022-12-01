@@ -169,13 +169,6 @@ func (engine *_Engine) CreateAdapterEndpoints(name string, endpoints string) (Ad
 	return adapter, nil
 }
 
-func (engine *_Engine) getSlackAdapter() (adp *_Adapter) {
-	engine.mutex.Lock()
-	adp = engine.slackAdapter
-	engine.mutex.Unlock()
-	return
-}
-
 func (engine *_Engine) CreateSlackAdapter() (Adapter, error) {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
