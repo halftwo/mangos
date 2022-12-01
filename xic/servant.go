@@ -11,7 +11,7 @@ type DefaultServant struct {
 }
 
 func (s DefaultServant) Xic(cur Current, in Arguments, out Arguments) error {
-	return NewExf(MethodNotFoundException, "Method \"%s\" not found in service \"%s\"", cur.Method(), cur.Service())
+	return NewExf(MethodNotFoundException, "Method %#v not found in service %#v", cur.Method(), cur.Service())
 }
 
 func getServantInfo(name string, servant Servant) (*ServantInfo, error) {

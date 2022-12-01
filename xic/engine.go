@@ -32,6 +32,7 @@ type _Engine struct {
 	shadowBox *ShadowBox
 	secretBox *SecretBox
 
+	keeper *ServantInfo
 	adapterMap map[string]*_Adapter
 	proxyMap map[string]*_Proxy
 	outConMap map[string]*_Connection
@@ -62,6 +63,11 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 	engine.cond.L = &engine.mutex
 
 	var err error
+	keeper, err := getServantInfo("\x00", &_KeeperServant{engine:engine})
+	if err != nil {
+		panic("failed to getServantInfo for the _KeeperServant")
+	}
+	engine.keeper = keeper
 	engine.adapterMap = make(map[string]*_Adapter)
 	engine.proxyMap = make(map[string]*_Proxy)
 	engine.outConMap = make(map[string]*_Connection)
@@ -163,7 +169,7 @@ func (engine *_Engine) CreateAdapterEndpoints(name string, endpoints string) (Ad
 }
 
 func (engine *_Engine) CreateSlackAdapter() (Adapter, error) {
-	adapter, err := newAdapter(engine, "", "")
+	adapter, err := newAdapter(engine, ".slack", "")
 	if err != nil {
 		return nil, err
 	}
@@ -188,6 +194,21 @@ func addAdapter(engine *_Engine, adapter *_Adapter) error {
 	}
 	engine.adapterMap[adapter.Name()] = adapter
 	return nil
+}
+
+func (engine *_Engine) findAdapter(name string) *_Adapter {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+	return engine.adapterMap[name]
+}
+
+func (engine *_Engine) getAllAdapters(aps map[string]string) {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+
+	for k, v := range engine.adapterMap {
+		aps[k] = v.endpoints
+	}
 }
 
 func (engine *_Engine) StringToProxy(proxy string) (Proxy, error) {
@@ -270,25 +291,6 @@ func (engine *_Engine) wait_for_shutting_routine() {
 	engine.state = eng_SHUTTED
 	engine.cond.Broadcast()
 	engine.mutex.Unlock()
-}
-
-func (engine *_Engine) makeFixedProxy(service string, con *_Connection) (Proxy, error) {
-	engine.mutex.Lock()
-	defer engine.mutex.Unlock()
-	if engine.state != eng_ACTIVE {
-		return nil, ErrEngineShutted
-	}
-
-	prx, ok := engine.proxyMap[service]
-	if ok {
-		if prx.fixed && prx.cons[0] == con {
-			return prx, nil
-		}
-	}
-
-	prx = newProxyWithConnection(engine, service, con)
-	engine.proxyMap[service] = prx
-	return prx, nil
 }
 
 func (engine *_Engine) makeConnection(serviceHint string, endpoint string) (*_Connection, error) {

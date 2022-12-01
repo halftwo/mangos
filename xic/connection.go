@@ -11,31 +11,14 @@ import (
 	"runtime"
 	"strings"
 	"time"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"os"
 	"io"
 
-	"halftwo/mangos/vbs"
 	"halftwo/mangos/dlog"
 	"halftwo/mangos/srp6a"
 )
-
-type _Current struct {
-	_InQuest
-	con *_Connection
-}
-
-func newCurrent(con *_Connection, q *_InQuest) *_Current {
-	return &_Current{_InQuest: *q, con: con}
-}
-
-func (cur *_Current) Txid() int64	{ return cur.txid }
-func (cur *_Current) Service() string	{ return cur.service }
-func (cur *_Current) Method() string	{ return cur.method }
-func (cur *_Current) Ctx() Context	{ return cur.ctx }
-func (cur *_Current) Con() Connection	{ return cur.con }
 
 type _ConState int32
 const (
@@ -54,9 +37,10 @@ const DEFAULT_CONNECTION_MAXQ = 1000
 type _Connection struct {
 	c		net.Conn
 	state		_ConState
-	engine          *_Engine
 	incoming        bool
 	closed		bool
+	id		string
+	engine          *_Engine
 	adapter         atomic.Value // Adapter
 	serviceHint     string
 	cipher          *_Cipher
@@ -106,6 +90,7 @@ func (q *OutMsgQueue) PopFront() _OutMessage {
 
 func _newConnection(engine *_Engine, incoming bool) *_Connection {
 	con := &_Connection{
+		id: GenerateRandomBase57Id(23),
 		engine: engine,
 		incoming: incoming,
 		maxQ: DEFAULT_CONNECTION_MAXQ,
@@ -178,6 +163,7 @@ func (con *_Connection) String() string {
 }
 
 func (con *_Connection) IsLive() bool { return con.state <= con_ACTIVE }
+func (con *_Connection) Id() string { return con.id }
 func (con *_Connection) Incoming() bool { return con.incoming }
 func (con *_Connection) Timeout() uint32 { return uint32(con.timeout / time.Millisecond) }
 func (con *_Connection) Endpoint() string { return con.endpoint.String() }
@@ -256,7 +242,7 @@ func (con *_Connection) close_and_reply(retryable bool) {
 	}
 }
 
-func (con *_Connection) CreateProxy(service string) (Proxy, error) {
+func (con *_Connection) CreateFixedProxy(service string) (Proxy, error) {
 	if strings.IndexByte(service, '@') >= 0 {
 		return nil, errors.New("Service name can't contain '@'")
 	}
@@ -265,8 +251,9 @@ func (con *_Connection) CreateProxy(service string) (Proxy, error) {
 		con.pending = make(map[int64]*_Result)
 	}
 	con.mutex.Unlock()
-	prx, err := con.engine.makeFixedProxy(service, con)
-	return prx, err
+
+	prx := newProxyWithConnection(con.engine, service, con)
+	return prx, nil
 }
 
 func (con *_Connection) Adapter() Adapter {
@@ -582,81 +569,6 @@ func err2OutAnswer(quest *_InQuest, err error) *_OutAnswer {
 	return answer
 }
 
-func type2rune(t reflect.Type) rune {
-	if t == vbs.ReflectTypeOfDecimal64 {
-		return 'd'
-	}
-	switch t.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return 'i'
-	case reflect.String:
-		return 's'
-	case reflect.Bool:
-		return 't'
-	case reflect.Float32, reflect.Float64:
-		return 'f'
-	case reflect.Array, reflect.Slice:
-		if t.Elem().Kind() == reflect.Uint8 {
-			return 'b'
-		}
-		return 'l'
-	case reflect.Map, reflect.Struct:
-		return 'm'
-	}
-	return 'x'
-}
-
-/**
-  (name1/type1,name2/type2,?name3/type3,...,nameN/typeN) if struct
-  () if empty struct
-  (...) if map
-**/
-func printMethodArg(w io.Writer, t reflect.Type) {
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	switch t.Kind() {
-	case reflect.Map:
-		fmt.Fprint(w, "(...)")
-	case reflect.Struct:
-		fmt.Fprint(w, "(")
-		fields := vbs.GetStructFieldInfos(t)
-		for i, f := range fields {
-			if i > 0 {
-				fmt.Fprint(w, ",")
-			}
-			if f.OmitEmpty {
-				fmt.Fprint(w, "?")
-			}
-			fmt.Fprintf(w, "%s/%c", f.Name, type2rune(t.Field(f.Idx).Type))
-		}
-		fmt.Fprint(w, ")")
-	}
-}
-
-func printMethodInfo(w io.Writer, mi *MethodInfo) {
-	fmt.Fprintf(w, "%s", mi.Name)
-	printMethodArg(w, mi.InType)
-	if !mi.Oneway {
-		printMethodArg(w, mi.OutType)
-	}
-}
-
-func printServantMethods(w io.Writer, si *ServantInfo) {
-	names := make([]string, 0, len(si.Methods))
-	for name := range si.Methods {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for i, name := range names {
-		if i > 0 {
-			fmt.Fprint(w, "\n")
-		}
-		printMethodInfo(w, si.Methods[name])
-	}
-}
-
 func makePointerValue(t reflect.Type) reflect.Value {
 	var p reflect.Value
 	if t.Kind() == reflect.Pointer {
@@ -680,16 +592,20 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 	cli_oneway := quest.txid == 0
 	srv_oneway := false
 
-	if adapter == nil {
-		err = NewException(AdapterAbsentException)
-		goto wrong
+	if quest.service == "\x00" {
+		si = con.engine.keeper
 	} else {
-		si = adapter.FindServant(quest.service)
-		if si == nil {
-			si := adapter.DefaultServant()
+		if adapter == nil {
+			err = NewException(AdapterAbsentException)
+			goto wrong
+		} else {
+			si = adapter.FindServant(quest.service)
 			if si == nil {
-				err = NewExf(ServiceNotFoundException, "%s", quest.service)
-				goto wrong
+				si := adapter.DefaultServant()
+				if si == nil {
+					err = NewExf(ServiceNotFoundException, "service=%#v", quest.service)
+					goto wrong
+				}
 			}
 		}
 	}
@@ -726,10 +642,12 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 		}
 	} else {
 		outArgs := Arguments{}
-		if quest.method == "" {
-			b := &bytes.Buffer{}
-			printServantMethods(b, si)
-			outArgs.Set("methods", b.String())
+		if len(quest.method) > 0 && quest.method[0] == 0x00 {
+			if quest.method == "\x00methods" {
+				outArgs.Set("methods", getServantMethods(si))
+			} else {
+				err = NewExf(MethodNotFoundException, "method=%#v", quest.method)
+			}
 		} else {
 			inArgs := Arguments{}
 			err = quest.DecodeArgs(inArgs)
@@ -818,8 +736,8 @@ func checkHeader(header _MessageHeader) error {
 	case QuestMsgType, AnswerMsgType, CheckMsgType:
 		if (header.Flags &^ FLAG_MASK) != 0 {
 			return errors.New("Unknown message Flags")
-		} else if header.BodySize > MaxMessageSize {
-			if (header.Flags & FLAG_CIPHER) == 0 || header.BodySize - CipherMacSize > MaxMessageSize {
+		} else if int(header.BodySize) > MaxMessageSize {
+			if (header.Flags & FLAG_CIPHER) == 0 || int(header.BodySize) - CipherMacSize > MaxMessageSize {
 				return errors.New("Message size too large")
 			}
 		}
@@ -1067,7 +985,16 @@ func (con *_Connection) check_doable(quest *_InQuest) bool {
 	}
 	con.mutex.Unlock()
 
+	if doit {
+		if len(quest.service) == 0 {
+			err = NewEx(ServiceNotFoundException, "service=\"\"")
+		} else if len(quest.method) == 0 {
+			err = NewEx(MethodNotFoundException, "method=\"\"")
+		}
+	}
+
 	if err != nil {
+		doit = false
 		dlog.Log("XIC.WARN", "%s", err.Error())
 
 		if quest.txid == 0 {
