@@ -158,6 +158,7 @@ type Proxy interface {
 	Engine() Engine
 	Service() string
 	String() string
+	Endpoints() string
 
 	Context() Context
 	SetContext(ctx Context)
@@ -186,7 +187,6 @@ type Connection interface {
 	CreateFixedProxy(service string) (Proxy, error)
 
 	Adapter() Adapter
-	SetAdapter(adapter Adapter)
 
 	Incoming() bool
 	Timeout() uint32

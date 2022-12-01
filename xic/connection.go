@@ -119,6 +119,7 @@ func (con *_Connection) _set_timeouts(ei *EndpointInfo) {
 func newOutgoingConnection(engine *_Engine, serviceHint string, ei *EndpointInfo) *_Connection {
 	con := _newConnection(engine, false)
 	con.endpoint = ei
+	con.adapter.Store(engine.getSlackAdapter())
 
 	con._set_timeouts(ei)
 	go con.client_run()
@@ -262,10 +263,6 @@ func (con *_Connection) Adapter() Adapter {
 		return a.(Adapter)
 	}
 	return nil
-}
-
-func (con *_Connection) SetAdapter(adapter Adapter) {
-	con.adapter.Store(adapter)
 }
 
 func (con *_Connection) _generate_txid() int64 {

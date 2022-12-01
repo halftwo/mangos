@@ -33,6 +33,7 @@ type _Engine struct {
 	secretBox *SecretBox
 
 	keeper *ServantInfo
+	slackAdapter *_Adapter
 	adapterMap map[string]*_Adapter
 	proxyMap map[string]*_Proxy
 	outConMap map[string]*_Connection
@@ -168,16 +169,26 @@ func (engine *_Engine) CreateAdapterEndpoints(name string, endpoints string) (Ad
 	return adapter, nil
 }
 
+func (engine *_Engine) getSlackAdapter() (adp *_Adapter) {
+	engine.mutex.Lock()
+	adp = engine.slackAdapter
+	engine.mutex.Unlock()
+	return
+}
+
 func (engine *_Engine) CreateSlackAdapter() (Adapter, error) {
-	adapter, err := newAdapter(engine, ".slack", "")
-	if err != nil {
-		return nil, err
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+
+	if engine.slackAdapter != nil {
+		return nil, fmt.Errorf("SlackAdapter already created")
 	}
 
-	err = addAdapter(engine, adapter)
+	adapter, err := newAdapter(engine, "-SLACK-", "")
 	if err != nil {
 		return nil, err
 	}
+	engine.slackAdapter = adapter
 	return adapter, nil
 }
 

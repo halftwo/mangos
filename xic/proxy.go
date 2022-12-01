@@ -115,6 +115,14 @@ func (prx *_Proxy) String() string {
 	return prx.str
 }
 
+func (prx *_Proxy) Endpoints() string {
+	k := strings.IndexByte(prx.str, '@')
+	if k < 0 {
+		return ""
+	}
+	return prx.str[k:]
+}
+
 func (prx *_Proxy) Context() Context {
 	ctx := prx.ctx.Load().(Context)
 	return ctx
