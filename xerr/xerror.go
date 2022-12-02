@@ -1,63 +1,75 @@
 package xerr
 
 import (
+	"io"
 	"fmt"
 	"strings"
 	"runtime"
 )
 
-func Trace(cause any, args ...any) Xerror {
+type XErr interface {
+	error
+	Cause() any
+	Unwrap() error
+	PrintTrace(w io.Writer)
+}
+
+func Trace(cause error, args ...any) XErr {
 	msg := fmt.Sprint(args...)
 	return doTrace(cause, msg)
 }
 
-func Tracef(cause any, format string, args ...any) Xerror {
+func Tracef(cause error, format string, args ...any) XErr {
 	msg := fmt.Sprintf(format, args...)
 	return doTrace(cause, msg)
 }
 
-func doTrace(cause any, msg string) Xerror {
-	err, ok := cause.(*_Xerror)
+func Errorf(format string, args ...any) XErr {
+	msg := fmt.Sprintf(format, args...)
+	return doTrace(nil, msg)
+}
+
+func doTrace(cause any, msg string) *_XErr {
+	err, ok := cause.(*_XErr)
 	if !ok {
-		err = newXerror(cause)
+		err = newXErr(cause)
 	}
-	err.trace(2, msg)
+	err.trace_msg(2, msg)
 	return err
 }
 
-type Xerror interface {
-	Error() string
-	Cause() any
-}
-
-type _Xerror struct {
+type _XErr struct {
 	cause       any
 	stacktrace []uintptr      // first stack trace
 	msgtrace   []_TraceItem   // all messages traced
 }
 
-
-func newXerror(cause any) *_Xerror {
-	return &_Xerror{cause:cause}
+func newXErr(cause any) *_XErr {
+	return &_XErr{cause:cause}
 }
 
-func (err *_Xerror) Error() string {
-	return fmt.Sprintf("%#v", err)
+func (err *_XErr) Error() string {
+	return fmt.Sprintf("%v", err)
+}
+
+func (err *_XErr) Unwrap() error {
+	e, _ := err.cause.(error)
+	return e
 }
 
 // Return the "cause" of this error.
 // Cause could be used for error handling/switching,
 // or for holding general error/debug information.
-func (err *_Xerror) Cause() any {
+func (err *_XErr) Cause() any {
 	return err.cause
 }
 
 // Add tracing information with msg.
 // Set n=0 unless wrapped with some function, then n > 0.
-func (err *_Xerror) trace(n int, msg string) {
+func (err *_XErr) trace_msg(n int, msg string) {
 	if err.stacktrace == nil {
-		var pcs = make([]uintptr, 32)
-		n := runtime.Callers(n + 2, pcs)
+		var pcs = make([]uintptr, 16)
+		n := runtime.Callers(n + 3, pcs)
 		err.stacktrace = pcs[:n]
 	}
 
@@ -65,47 +77,68 @@ func (err *_Xerror) trace(n int, msg string) {
 	err.msgtrace = append(err.msgtrace, _TraceItem{pc:pc, msg:msg})
 }
 
-func (err *_Xerror) Format(s fmt.State, verb rune) {
-	switch verb {
-	case 'p':
-		s.Write([]byte(fmt.Sprintf("%p", &err)))
-	default:
-		if s.Flag('#') {
-			s.Write([]byte("--= Xerror =--\n"))
-			s.Write([]byte(fmt.Sprintf("Cause: %#v\n", err.cause)))
-			s.Write([]byte(fmt.Sprintf("Msg-Traces:\n")))
-			for i, mt := range err.msgtrace {
-				s.Write([]byte(fmt.Sprintf(" %3d  %s\n", i, mt.String())))
-			}
-			if err.stacktrace != nil {
-				s.Write([]byte(fmt.Sprintf("Stack-Trace:\n")))
-				for i, pc := range err.stacktrace {
-					fun := runtime.FuncForPC(pc)
-					name := getFuncName(fun)
-					file, line := fun.FileLine(pc)
-					s.Write([]byte(fmt.Sprintf(" %3d  %s:%d:%s\n", i, file, line, name)))
-				}
-			}
-			s.Write([]byte("--= /Xerror =--\n"))
-		} else {
-			s.Write([]byte(fmt.Sprintf("Xerror{%#v}", err.cause)))
-		}
-	}
-}
-
 type _TraceItem struct {
 	pc  uintptr
 	msg string
 }
 
-func (ti _TraceItem) String() string {
-	fun := runtime.FuncForPC(ti.pc)
-	name := getFuncName(fun)
-	file, line := fun.FileLine(ti.pc)
-	if len(ti.msg) == 0 {
-		return fmt.Sprintf("%s:%d:%s", file, line, name)
+func (err *_XErr) PrintTrace(w io.Writer) {
+	for i := len(err.msgtrace) - 1; i >= 0; i-- {
+		ti := &err.msgtrace[i]
+		if i > 0 {
+			w.Write([]byte(" v "))
+		} else {
+			w.Write([]byte(" O "))
+		}
+		printLocus(w, ti.pc)
+		if len(ti.msg) > 0 {
+			fmt.Fprintf(w, ": %s", ti.msg)
+		}
+		w.Write([]byte("\n"))
 	}
-	return fmt.Sprintf("%s:%d:%s  %s", file, line, name, ti.msg)
+	if len(err.stacktrace) > 0 {
+		for _, pc := range err.stacktrace {
+			w.Write([]byte(" ^ "))
+			printLocus(w, pc)
+			w.Write([]byte("\n"))
+		}
+	}
+}
+
+func (err *_XErr) Format(s fmt.State, verb rune) {
+	switch verb {
+	case 'p':
+		s.Write([]byte(fmt.Sprintf("%p", &err)))
+	default:
+		if s.Flag('#') {
+			s.Write([]byte("<XErr>\n"))
+			if err.cause != nil {
+				fmt.Fprintf(s, "Cause: %#v\n", err.cause)
+			}
+			s.Write([]byte("Trace:\n"))
+			err.PrintTrace(s)
+			s.Write([]byte("</XErr>\n"))
+		} else {
+			ti := &err.msgtrace[0]
+			s.Write([]byte("XErr "))
+			printLocus(s, ti.pc)
+			if len(ti.msg) > 0 {
+				fmt.Fprintf(s, ": %s", ti.msg)
+			}
+			if err.cause != nil {
+				s.Write([]byte(" --- "))
+				fmt.Fprintf(s, "%#v", err.cause)
+			}
+		}
+	}
+}
+
+func printLocus(w io.Writer, pc uintptr) {
+	fun := runtime.FuncForPC(pc)
+	name := getFuncName(fun)
+	file, line := fun.FileLine(pc)
+	file = TrimFileName(file, 3)
+	fmt.Fprintf(w, "%s:%d:%s", file, line, name)
 }
 
 func getFuncName(f *runtime.Func) string {
@@ -115,5 +148,19 @@ func getFuncName(f *runtime.Func) string {
 		return name[i+1:]
 	}
 	return name
+}
+
+func TrimFileName(name string, n int) string {
+	var k int
+	s := name
+	for i := 0; i < n; i++ {
+		k = strings.LastIndexByte(s, '/')
+		if k < 0 {
+			return name
+		}
+		s = name[:k]
+	}
+	k++
+	return name[k:]
 }
 
