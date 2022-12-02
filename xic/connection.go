@@ -20,6 +20,8 @@ import (
 	"halftwo/mangos/srp6a"
 )
 
+const DEFAULT_CONNECTION_MAXQ = 2000
+
 type _ConState int32
 const (
 	con_INIT	_ConState = iota
@@ -31,8 +33,6 @@ const (
 	con_CLOSED
 	con_ERROR
 )
-
-const DEFAULT_CONNECTION_MAXQ = 1000
 
 type _Connection struct {
 	c		net.Conn

@@ -15,6 +15,8 @@ import (
 
 const DEFAULT_ENGINE_MAXQ = 10000
 
+const SLACK_ADAPTER_NAME = "-SLACK-"
+
 const (
 	eng_ACTIVE = iota
 	eng_SHUTTING
@@ -178,7 +180,7 @@ func (engine *_Engine) CreateSlackAdapter() (Adapter, error) {
 		return nil, xerr.Errorf("SlackAdapter already created")
 	}
 
-	adapter, err := newAdapter(engine, "-SLACK-", "")
+	adapter, err := newAdapter(engine, SLACK_ADAPTER_NAME, "")
 	if err != nil {
 		return nil, err
 	}

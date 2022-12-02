@@ -35,7 +35,12 @@ type _Out_services struct {
 }
 
 func (kp *_KeeperServant) Xic_services(cur Current, in _In_services, out *_Out_services) error {
-	ap := kp.engine.findAdapter(in.Adapter)
+	var ap *_Adapter
+	if in.Adapter == SLACK_ADAPTER_NAME {
+		ap = kp.engine.slackAdapter
+	} else {
+		ap = kp.engine.findAdapter(in.Adapter)
+	}
 	if ap != nil {
 		var sis []*ServantInfo
 		ap.srvMap.Range(func (key, value any) bool {

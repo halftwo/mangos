@@ -6,7 +6,6 @@ import (
 	"net"
 	"strings"
 
-	"halftwo/mangos/crock32"
 	"halftwo/mangos/xerr"
 )
 
@@ -64,11 +63,7 @@ func (l *_Listener) deactivate() {
 
 func newAdapter(engine *_Engine, name string, endpoints string) (*_Adapter, error) {
 	if name == "" {
-		uuid := GenerateRandomUuidBytes()
-		buf := make([]byte, 1 + crock32.EncodedLen(len(uuid)))
-		buf[0] = '_'
-		crock32.EncodeLower(buf[1:], uuid)
-		name = string(buf)
+		panic("Adapter must have a name")
 	}
 
 	adapter := &_Adapter{engine:engine, name:name}
