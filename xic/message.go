@@ -2,11 +2,11 @@ package xic
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"encoding/binary"
 
 	"halftwo/mangos/vbs"
+	"halftwo/mangos/xerr"
 )
 
 type MsgType byte
@@ -266,7 +266,7 @@ func (m *_InMsg) DecodeArgs(args any) error {
 	if err != nil {
 		return err
 	} else if dec.More() {
-		return fmt.Errorf("Surplus bytes left after decoding arguments")
+		return xerr.Errorf("Surplus bytes left after decoding arguments")
 	}
 	return nil
 }
@@ -335,11 +335,11 @@ func (a *_InAnswer) Type() MsgType {
 
 func DecodeMessage(header _MessageHeader, buf []byte) (_Message, error) {
 	if header.Magic != 'X' || header.Version != '!' {
-		return nil, fmt.Errorf("Unknown message Magic(%d) and Version(%d)", header.Magic, header.Version)
+		return nil, xerr.Errorf("Unknown message Magic(%d) and Version(%d)", header.Magic, header.Version)
 	}
 	if header.Type == HelloMsgType || header.Type == ByeMsgType {
 		if header.Flags != 0 || header.BodySize != 0 {
-			return nil, fmt.Errorf("Invalid Hello or Bye message")
+			return nil, xerr.Errorf("Invalid Hello or Bye message")
 		}
 	}
 
@@ -356,7 +356,7 @@ func DecodeMessage(header _MessageHeader, buf []byte) (_Message, error) {
 	case ByeMsgType:
 		msg = theByeMessage
 	default:
-		return nil, fmt.Errorf("Unknown message Type(%d)", header.Type)
+		return nil, xerr.Errorf("Unknown message Type(%d)", header.Type)
 	}
 	return msg, nil
 }

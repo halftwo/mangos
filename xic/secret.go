@@ -104,7 +104,7 @@ func (sb *SecretBox) initialize(content []byte) error {
 
 		key, value, err := xstr.SplitKeyValue(line, "=")
 		if len(key) == 0 || len(value) == 0 {
-			return fmt.Errorf("Invalid syntax on line %d", lineno)
+			return xerr.Errorf("Invalid syntax on line %d", lineno)
 		}
 
 		var n uint64
@@ -136,7 +136,7 @@ func (sb *SecretBox) initialize(content []byte) error {
 			if err != nil {
 				return xerr.Tracef(err, "Invalid net prefix on line %d", lineno)
 			} else if n == 0 || n > 128 {
-				return xerr.Tracef(s.netPrefix, "Invalid net prefix on line %d", lineno)
+				return xerr.Errorf("Invalid net prefix on line %d: %s", lineno, tmp)
 			}
 			s.netPrefix = uint8(n)
 		}
@@ -150,14 +150,14 @@ func (sb *SecretBox) initialize(content []byte) error {
 			}
 			copy(s.ipv6[:], ip)
 		} else if s.netPrefix != 128 {
-			return xerr.Tracef(s.netPrefix, "Invalid net prefix on line %d", lineno)
+			return xerr.Errorf("Invalid net prefix on line %d: %d", lineno, s.netPrefix)
 		}
 
 		s.identity, s.password, err = xstr.SplitKeyValue(value, ":")
 		if err != nil {
 			return xerr.Tracef(err, "Invalid identity or password on line %d", lineno)
 		} else if len(s.password) == 0 {
-			return xerr.Tracef(nil, "Empty password on line %d", lineno)
+			return xerr.Errorf("Empty password on line %d", lineno)
 		}
 
 		sb.secrets = append(sb.secrets, s)

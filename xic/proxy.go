@@ -6,13 +6,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-        "errors"
         "math/rand"
         "reflect"
 
 	"halftwo/mangos/xstr"
 	"halftwo/mangos/carp"
 	"halftwo/mangos/dlog"
+	"halftwo/mangos/xerr"
 )
 
 type _Proxy struct {
@@ -199,14 +199,14 @@ func (prx *_Proxy) pick_hash(ctx Context) (con *_Connection, err error) {
 	ss := prx.cseq.Sequence(hint, seqs[:])
 	*/
 	// TODO
-	return nil, errors.New("Not Implemented")
+	return nil, xerr.Errorf("Not Implemented")
 }
 
 func (prx *_Proxy) pick_normal() (*_Connection, error) {
 	con := prx.cons[prx.idx]
 	if con == nil || !con.IsLive() {
 		if prx.fixed {
-			return nil, errors.New("Broken connection of fixed proxy")
+			return nil, xerr.Errorf("Broken connection of fixed proxy")
 		}
 
 		prx.idx++

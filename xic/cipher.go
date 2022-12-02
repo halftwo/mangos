@@ -1,12 +1,12 @@
 package xic
 
 import (
-	"fmt"
 	"bytes"
 	"crypto/aes"
 	"crypto/sha1"
 
 	"halftwo/mangos/eax"
+	"halftwo/mangos/xerr"
 )
 
 type _CipherSuite int
@@ -71,7 +71,7 @@ func newXicCipher(suite _CipherSuite, keyInfo []byte, isServer bool) (*_Cipher, 
 	case AES256_EAX:
 		keyLen = 32
 	default:
-		return nil, fmt.Errorf("Unsupported CipherSuite %s", suite)
+		return nil, xerr.Errorf("Unsupported CipherSuite %s", suite)
 	}
 
 	c := &_Cipher{}

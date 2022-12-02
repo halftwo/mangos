@@ -3,11 +3,12 @@ package xic
 import (
 	"sync"
 	"path/filepath"
-	"fmt"
 	"os"
 	"bufio"
 	"strings"
 	"strconv"
+
+	"halftwo/mangos/xerr"
 )
 
 type _Setting struct {
@@ -47,14 +48,14 @@ func (st *_Setting) LoadFile(filename string) error {
 
 		ss := strings.SplitN(line, "=", 2)
 		if len(ss) != 2 {
-			return fmt.Errorf("setting: invalid key=value pairs in %s:%d", filename, lineno)
+			return xerr.Errorf("setting: invalid key=value pairs in %s:%d", filename, lineno)
 		}
 
 		key, value := ss[0], ss[1]
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
 		if len(key) == 0 || len(value) == 0 {
-			return fmt.Errorf("setting: invalid key=value pairs in %s:%d", filename, lineno)
+			return xerr.Errorf("setting: invalid key=value pairs in %s:%d", filename, lineno)
 		}
 
 		st.m.Store(key, value)

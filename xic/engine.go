@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"halftwo/mangos/dlog"
+	"halftwo/mangos/xerr"
 )
 
 const DEFAULT_ENGINE_MAXQ = 10000
@@ -153,7 +154,7 @@ func (engine *_Engine) CreateAdapterEndpoints(name string, endpoints string) (Ad
 		itemkey := name + ".Endpoints"
 		endpoints = engine.setting.Get(itemkey)
 		if endpoints == "" {
-			return nil, fmt.Errorf("%s not set", itemkey)
+			return nil, xerr.Errorf("%s not set", itemkey)
 		}
 	}
 
@@ -174,7 +175,7 @@ func (engine *_Engine) CreateSlackAdapter() (Adapter, error) {
 	defer engine.mutex.Unlock()
 
 	if engine.slackAdapter != nil {
-		return nil, fmt.Errorf("SlackAdapter already created")
+		return nil, xerr.Errorf("SlackAdapter already created")
 	}
 
 	adapter, err := newAdapter(engine, "-SLACK-", "")
@@ -194,7 +195,7 @@ func addAdapter(engine *_Engine, adapter *_Adapter) error {
 
 	_, ok := engine.adapterMap[adapter.Name()]
 	if ok {
-		return fmt.Errorf("Adapter(%s) already created", adapter.Name())
+		return xerr.Errorf("Adapter(%s) already created", adapter.Name())
 	}
 	engine.adapterMap[adapter.Name()] = adapter
 	return nil

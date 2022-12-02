@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"halftwo/mangos/xstr"
+	"halftwo/mangos/xerr"
 )
 
 
@@ -44,19 +45,19 @@ func parseEndpoint(endpoint string) (*EndpointInfo, error) {
 	ei.host = netSp.Next()
 	port, err := strconv.Atoi(netSp.Next())
 	if err != nil || port <= 0 || port > math.MaxUint16 {
-		return nil, fmt.Errorf("Invalid port in endpoint \"%s\"", endpoint)
+		return nil, xerr.Errorf("Invalid port in endpoint \"%s\"", endpoint)
 
 	}
 	ei.port = uint16(port)
 
 	if netSp.HasMore() || netSp.Count() != 3 {
-		return nil, fmt.Errorf("Invalid format. endpoint=%s", endpoint)
+		return nil, xerr.Errorf("Invalid format. endpoint=%s", endpoint)
 	}
 
 	if ei.proto == "" || strings.EqualFold(ei.proto, "tcp") {
 		ei.proto = "tcp"
 	} else {
-		return nil, fmt.Errorf("Unsupported transport protocol \"%s\"", ei.proto)
+		return nil, xerr.Errorf("Unsupported transport protocol \"%s\"", ei.proto)
 	}
 
 	for tk.HasMore() {

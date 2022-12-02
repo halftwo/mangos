@@ -1,17 +1,17 @@
 package xic
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
-	"errors"
+
+	"halftwo/mangos/xerr"
 )
 
 type DefaultServant struct {
 }
 
 func (s DefaultServant) Xic(cur Current, in Arguments, out Arguments) error {
-	return NewExf(MethodNotFoundException, "Method %#v not found in service %#v", cur.Method(), cur.Service())
+	return newExf(MethodNotFoundException, "Method %#v not found in service %#v", cur.Method(), cur.Service())
 }
 
 func getServantInfo(name string, servant Servant) (*ServantInfo, error) {
@@ -70,16 +70,16 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 
 		/* receiver, Current, in, out */
 		if m.Type.NumIn() < 3 || m.Type.NumIn() > 4 || m.Type.NumOut() != 1 {
-			return nil, fmt.Errorf("The number of input arguments (%d) or output arguments (%d) is not correct", m.Type.NumIn(), m.Type.NumOut())
+			return nil, xerr.Errorf("The number of input arguments (%d) or output arguments (%d) is not correct", m.Type.NumIn(), m.Type.NumOut())
 		}
 
 		if errType := m.Type.Out(0); errType != typeOfError {
-			return nil, fmt.Errorf("The output argument must be an error interface")
+			return nil, xerr.Errorf("The output argument must be an error interface")
 		}
 
 		cur := m.Type.In(1)
 		if cur.Name() != "Current" && cur.PkgPath() != "halftwo/mangos/xic" {	// TODO
-			return nil, fmt.Errorf("The first argument must be of type xic.Current instead of %s", cur.Name())
+			return nil, xerr.Errorf("The first argument must be of type xic.Current instead of %s", cur.Name())
 		}
 
 		mi := &MethodInfo{
@@ -88,7 +88,7 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 			InType: m.Type.In(2),
 		}
 		if !IsValidInType(mi.InType) {
-			return nil, errors.New("Argument in of xic method must be a (pointer to) map[string]any or a (pointer to) struct")
+			return nil, xerr.Errorf("Argument in of xic method must be a (pointer to) map[string]any or a (pointer to) struct")
 		}
 
 		if m.Type.NumIn() == 3 {
@@ -96,7 +96,7 @@ func getMethodTable(servant Servant) (map[string]*MethodInfo, error) {
 		} else {
 			mi.OutType = m.Type.In(3)
 			if !IsValidOutType(mi.OutType) {
-				return nil, errors.New("Argument out of xic method must be a (pointer to) map[string]any or a pointer to struct")
+				return nil, xerr.Errorf("Argument out of xic method must be a (pointer to) map[string]any or a pointer to struct")
 			}
 		}
 

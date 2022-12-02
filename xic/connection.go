@@ -153,6 +153,10 @@ func netc2str(c net.Conn) string {
 	return fmt.Sprintf("%s/%s/%s", laddr.Network(), laddr.String(), raddr.String())
 }
 
+func (con *_Connection) remoteAddr() string {
+	return con.c.RemoteAddr().String()
+}
+
 func (con *_Connection) String() string {
 	con.mutex.Lock()
 	if con._str == "" {
@@ -201,7 +205,7 @@ func (con *_Connection) closeGracefully() {
 }
 
 func (con *_Connection) closeForcefully() {
-	err := NewException(ConnectionClosedException)
+	err := newException(ConnectionClosedException)
 	con.set_error(err)	// TODO
 	con.close_and_reply(false)
 }
@@ -232,7 +236,7 @@ func (con *_Connection) close_and_reply(retryable bool) {
 	if len(pending) > 0 {
 		if err == nil {
 			// TODO: retryable
-			err = NewException(QuestNotServedException)
+			err = newException(QuestNotServedException)
 		}
 
 		for _, res := range pending {
@@ -245,7 +249,7 @@ func (con *_Connection) close_and_reply(retryable bool) {
 
 func (con *_Connection) CreateFixedProxy(service string) (Proxy, error) {
 	if strings.IndexByte(service, '@') >= 0 {
-		return nil, errors.New("Service name can't contain '@'")
+		return nil, newEx(InvalidParameterException, "Service name can't contain '@'")
 	}
 	con.mutex.Lock()
 	if con.pending == nil {
@@ -290,7 +294,7 @@ func (con *_Connection) invoke(prx *_Proxy, q *_OutQuest, res *_Result) {
 	if ok {
 		con.sendMessage(q)
 	} else if res != nil {
-		res.err = errors.New("Connection closing or closed")
+		res.err = newException(ConnectionClosedException)
 	}
 }
 
@@ -332,7 +336,7 @@ func (con *_Connection) check_send(cmd string, args any) bool {
 func expect_check_msg(msg _Message, cmd string, args any) error {
 	check, ok := msg.(*_InCheck)
 	if !ok || check.cmd != cmd {
-		return NewExf(ProtocolException, "Unexpected cmd of CheckMessage %s", check.cmd)
+		return newExf(ProtocolException, "Unexpected cmd of CheckMessage %s", check.cmd)
 	}
 	return check.DecodeArgs(args)
 }
@@ -375,7 +379,7 @@ func (con *_Connection) server_handshake() bool {
 
 		v := con.engine.shadowBox.GetVerifier(s1.I)
 		if v == nil {
-			err = errors.New("No such identity")
+			err = newEx(AuthFailedException, "No such identity")
 			goto done
 		}
 
@@ -400,7 +404,7 @@ func (con *_Connection) server_handshake() bool {
 		srp6svr.SetA(s3.A)
 		M1 := srp6svr.ComputeM1()
 		if !bytes.Equal(M1, s3.M1) {
-			err = errors.New("srp6a M1 not equal")
+			err = newEx(AuthFailedException, "srp6a M1 not equal")
 			goto done
 		}
 
@@ -439,18 +443,18 @@ func (con *_Connection) client_handshake() bool {
 		}
 
 		if auth.Method != "SRP6a" {
-			err = errors.New("Unknown auth method")
+			err = newEx(AuthFailedException, "Unknown auth method")
 			goto done
 		}
 
 		if con.engine.secretBox == nil {
-			err = errors.New("No SecretBox supplied")
+			err = newEx(AuthFailedException, "No SecretBox supplied")
 			goto done
 		}
 
 		id, pass := con.engine.secretBox.FindEndpoint(con.serviceHint, con.endpoint)
 		if id == "" || pass == "" {
-			err = errors.New("No matched secret found")
+			err = newEx(AuthFailedException, "No matched secret found")
 			goto done
 		}
 
@@ -485,7 +489,7 @@ func (con *_Connection) client_handshake() bool {
 
 		M2 := srp6cl.ComputeM2()
 		if !bytes.Equal(M2, s4.M2) {
-			err = errors.New("srp6a M2 not equal")
+			err = newEx(AuthFailedException, "srp6a M2 not equal")
 			goto done
 		}
 
@@ -499,7 +503,7 @@ func (con *_Connection) client_handshake() bool {
 	}
 
 	if msg != nil && msg.Type() != HelloMsgType {
-		err = errors.New("Unexpected message received, expect Hello message")
+		err = newEx(ProtocolException, "Unexpected message received, expect Hello message")
 	}
 done:
 	if err != nil {
@@ -553,12 +557,10 @@ func err2OutAnswer(quest *_InQuest, err error) *_OutAnswer {
 	outErr.Set("raiser", fmt.Sprintf("%s*%s @", quest.method, quest.service))
 	ex, ok := err.(Exception)
 	if ok {
-		outErr.Set("exname", ex.Exname())
+		outErr.Set("exname", ex.Name())
 		outErr.Set("code", ex.Code())
-		outErr.Set("tag", ex.Tag())
 		outErr.Set("message", ex.Message())
-		detail := map[string]any{"file": ex.File(), "line": ex.Line()}
-		outErr.Set("detail", detail)
+		outErr.Set("locus", ex.Locus())
 	} else {
 		outErr.Set("message", err.Error())
 	}
@@ -593,14 +595,14 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 		si = con.engine.keeper
 	} else {
 		if adapter == nil {
-			err = NewException(AdapterAbsentException)
+			err = newException(AdapterAbsentException)
 			goto wrong
 		} else {
 			si = adapter.FindServant(quest.service)
 			if si == nil {
 				si := adapter.DefaultServant()
 				if si == nil {
-					err = NewExf(ServiceNotFoundException, "service=%#v", quest.service)
+					err = newExf(ServiceNotFoundException, "service=%#v", quest.service)
 					goto wrong
 				}
 			}
@@ -643,7 +645,7 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 			if quest.method == "\x00methods" {
 				outArgs.Set("methods", getServantMethods(si))
 			} else {
-				err = NewExf(MethodNotFoundException, "method=%#v", quest.method)
+				err = newExf(MethodNotFoundException, "method=%#v", quest.method)
 			}
 		} else {
 			inArgs := Arguments{}
@@ -712,10 +714,7 @@ func (con *_Connection) handleAnswer(answer *_InAnswer) {
 		args := NewArguments()
 		res.err = answer.DecodeArgs(args)
 		if res.err == nil {
-			res.err = &_Exception{name: args.GetString("exname"),
-				code: int(args.GetInt("code")),
-				tag:  args.GetString("tag"),
-				msg:  args.GetString("mess age")}
+			res.err = newRemoteExCode(ExNameType(args.GetString("exname")), int(args.GetInt("code")), args.GetString("message"), con)
 		}
 	} else if res.out != nil {
 		res.err = answer.DecodeArgs(res.out)
@@ -726,24 +725,24 @@ func (con *_Connection) handleAnswer(answer *_InAnswer) {
 
 func checkHeader(header _MessageHeader) error {
 	if header.Magic != 'X' || header.Version != '!' {
-		return fmt.Errorf("Unknown message Magic(%d) and Version(%d)", header.Magic, header.Version)
+		return newExf(ProtocolException, "Unknown message Magic(%d) and Version(%d)", header.Magic, header.Version)
 	}
 
 	switch header.Type {
 	case QuestMsgType, AnswerMsgType, CheckMsgType:
 		if (header.Flags &^ FLAG_MASK) != 0 {
-			return errors.New("Unknown message Flags")
+			return newEx(ProtocolException, "Unknown message Flags")
 		} else if int(header.BodySize) > MaxMessageSize {
 			if (header.Flags & FLAG_CIPHER) == 0 || int(header.BodySize) - CipherMacSize > MaxMessageSize {
-				return errors.New("Message size too large")
+				return newExf(ProtocolException, "Message size too large, should less than %d", MaxMessageSize)
 			}
 		}
 	case HelloMsgType, ByeMsgType:
 		if header.Flags != 0 || header.BodySize != 0 {
-			return fmt.Errorf("Invalid Hello or Bye message")
+			return newEx(ProtocolException, "Invalid Hello or Bye message")
 		}
 	default:
-		return fmt.Errorf("Unknown message Type(%d)", header.Type)
+		return newExf(ProtocolException, "Unknown message Type(%d)", header.Type)
 	}
 
 	return nil
@@ -841,18 +840,18 @@ func (con *_Connection) recv_msg(must bool) (msg _Message) {
 	if (header.Flags & FLAG_CIPHER) != 0 {
 		cipher := con.cipher
 		if cipher == nil {
-			err = errors.New("FLAG_CIPHER set but no cipher negotiated")
+			err = newEx(ProtocolException, "FLAG_CIPHER set but no cipher negotiated")
 			goto done
 		}
 		if header.BodySize <= CipherMacSize {
-			err = errors.New("Invalid message BodySize")
+			err = newEx(ProtocolException, "Invalid message BodySize")
 			goto done
 		}
 		header.BodySize -= CipherMacSize
 		cipher.InputStart(headbuf[:])
 		cipher.InputUpdate(bodybuf, bodybuf[:header.BodySize])
 		if !cipher.InputFinish(bodybuf[header.BodySize:]) {
-			err = errors.New("Failed to decrypt msg body")
+			err = newEx(ProtocolException, "Failed to decrypt message")
 			goto done
 		}
 		bodybuf = bodybuf[:header.BodySize]
@@ -971,9 +970,9 @@ func (con *_Connection) check_doable(quest *_InQuest) bool {
 	con.mutex.Lock()
 	if con.state == con_ACTIVE {
 		if con.maxQ > 0 && con.numQ.Load() >= con.maxQ {
-			err = NewException(ConnectionOverloadException)
+			err = newException(ConnectionOverloadException)
 		} else if engine.numQ.Load() >= engine.maxQ {
-			err = NewException(ConnectionOverloadException)
+			err = newException(ConnectionOverloadException)
 		} else {
 			doit = true
 		}
@@ -984,9 +983,9 @@ func (con *_Connection) check_doable(quest *_InQuest) bool {
 
 	if doit {
 		if len(quest.service) == 0 {
-			err = NewEx(ServiceNotFoundException, "service=\"\"")
+			err = newEx(ServiceNotFoundException, "service=\"\"")
 		} else if len(quest.method) == 0 {
-			err = NewEx(MethodNotFoundException, "method=\"\"")
+			err = newEx(MethodNotFoundException, "method=\"\"")
 		}
 	}
 
@@ -1035,13 +1034,13 @@ func (con *_Connection) process_loop() {
 			con.mutex.Lock()
 			state := con.state
 			if state < con_CLOSED && con.numQ.Load() > 0 {
-				err = fmt.Errorf("Unexpected xic bye message")
+				err = newEx(ProtocolException, "Unexpected xic bye message")
 			}
 			con.mutex.Unlock()
 			goto done
 
 		default:
-			err = fmt.Errorf("Unexpected xic message type(%#x) received", msg.Type())
+			err = newExf(ProtocolException, "Unexpected xic message type(%#x) received", msg.Type())
 			goto done
 		}
 	}

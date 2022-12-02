@@ -4,10 +4,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"net"
-	"fmt"
 	"strings"
 
 	"halftwo/mangos/crock32"
+	"halftwo/mangos/xerr"
 )
 
 type _AdapterState int32
@@ -116,7 +116,7 @@ func (adp *_Adapter) Endpoints() string {
 
 func (adp *_Adapter) Activate() error {
 	if !atomic.CompareAndSwapInt32((*int32)(&adp.state), int32(adapter_INIT), int32(adapter_ACTIVE)) {
-		return fmt.Errorf("Adapter(%s) already activated", adp.name)
+		return xerr.Errorf("Adapter(%s) already activated", adp.name)
 	}
 
 	for _, l := range adp.listeners {
@@ -127,7 +127,7 @@ func (adp *_Adapter) Activate() error {
 
 func (adp *_Adapter) Deactivate() error {
 	if !atomic.CompareAndSwapInt32((*int32)(&adp.state), int32(adapter_ACTIVE), int32(adapter_FINISHED)) {
-		return fmt.Errorf("Adapter(%s) not in active state", adp.name)
+		return xerr.Errorf("Adapter(%s) not in active state", adp.name)
 	}
 
 	for _, l := range adp.listeners {
@@ -142,7 +142,7 @@ func (adp *_Adapter) AddServant(service string, servant Servant) (Proxy, error) 
 		return nil, err
 	}
 	if _, loaded := adp.srvMap.LoadOrStore(service, si); loaded {
-		return nil, fmt.Errorf("Service \"%s\" already added", service);
+		return nil, xerr.Errorf("Service \"%s\" already added", service);
 	}
 
 	proxy := service

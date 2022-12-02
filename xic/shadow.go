@@ -129,7 +129,7 @@ func (sb *ShadowBox) _addItem(lineno int, section _Section, buf []byte) error {
                 section = SCT_VERIFIER
 		key = key[1:]
                 if (len(key) == 0) {
-			return xerr.Tracef(nil, "Invalid syntax on line %d", lineno)
+			return xerr.Errorf("Invalid syntax on line %d", lineno)
 		}
 	}
 
@@ -144,13 +144,13 @@ func (sb *ShadowBox) _addItem(lineno int, section _Section, buf []byte) error {
 		s := &_Srp6a{}
 		n, err = strconv.ParseUint(string(bits_), 10, 16)
 		if err != nil || n < 512 || n > 1024*32 {
-                        return xerr.Tracef(n, "Invalid bits on line %d", lineno)
+                        return xerr.Tracef(err, "Invalid bits(%d) on line %d", n, lineno)
 		}
 		s.Bits = int(n)
 
 		n, err = strconv.ParseUint(string(gen_), 10, 31)
 		if err != nil {
-                        return xerr.Tracef(nil, "Invalid gen on line %d", lineno)
+                        return xerr.Tracef(err, "Invalid gen on line %d", lineno)
 		}
 		s.Gen = int(n)
 
@@ -161,7 +161,7 @@ func (sb *ShadowBox) _addItem(lineno int, section _Section, buf []byte) error {
 		}
 
 		if int(s.Bits) != len(s.N) * 8 {
-                        return xerr.Tracef(nil, "N too small or too large on line %d", lineno)
+                        return xerr.Errorf("N too small or too large on line %d", lineno)
 		}
 
 		sb.srp6aMap[string(key)] = s
@@ -189,7 +189,7 @@ func (sb *ShadowBox) _addItem(lineno int, section _Section, buf []byte) error {
 		sb.verifierMap[string(key)] = v
 
 	} else {
-		return xerr.Tracef(nil, "Section not specified until line %d", lineno)
+		return xerr.Errorf("Section not specified until line %d", lineno)
 	}
 
 	return nil
@@ -278,7 +278,7 @@ func (sb *ShadowBox) initialize(content []byte) error {
 				section = SCT_VERIFIER
 			} else {
 				section = SCT_UNKNOWN
-				return xerr.Tracef(line, "Unknown section `%s` on line %d", line, lineno)
+				return xerr.Errorf("Unknown section on line %d: %s", lineno, line)
 			}
 			if item_start >= 0 {
 				err := sb._addItem(item_lineno, section, content[item_start:lstart])
@@ -295,7 +295,7 @@ func (sb *ShadowBox) initialize(content []byte) error {
 				 */
 			} else {
 				if bytes.IndexByte(line, '=') <= 0 {
-					return xerr.Tracef(line, "Invalid syntax on line %d", lineno)
+					return xerr.Errorf("Invalid syntax on line %d: %s", lineno, line)
 				}
 				item_start = lstart
 				item_lineno = lineno
@@ -364,7 +364,7 @@ func (sb *ShadowBox) GetVerifier(identity string) *_Verifier {
 func (sb *ShadowBox) CreateSrp6aServer(paramId string, hashId string) (*srp6a.Srp6aServer, error) {
 	params := sb.GetSrp6aParams(paramId)
 	if params == nil {
-		return nil, xerr.Tracef(nil, "Unknown paramId \"%s\"", paramId)
+		return nil, xerr.Errorf("Unknown paramId \"%s\"", paramId)
 	}
 
 	server := srp6a.NewServer(params.Gen, params.N, params.Bits, hashId)

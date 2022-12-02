@@ -193,14 +193,16 @@ type Connection interface {
 	Endpoint() string
 }
 
+
+type ExNameType string
+
 type Exception interface {
 	error
-	Exname() string
+	Name() ExNameType
 	Code() int
-	Tag() string
 	Message() string
-	File() string
-	Line() int
+	Locus() string
+	IsRemote() bool
 }
 
 type Result interface {

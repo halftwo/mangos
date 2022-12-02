@@ -1,11 +1,11 @@
 package xic
 
 import (
-	"fmt"
 	"math"
 	"reflect"
 
 	"halftwo/mangos/vbs"
+	"halftwo/mangos/xerr"
 )
 
 type Arguments map[string]any
@@ -21,7 +21,7 @@ func (args Arguments) CopyFrom(rhs any) error {
 func (args Arguments) CopyTo(x any) error {
 	v := reflect.ValueOf(x)
 	if v.Kind() != reflect.Pointer || v.IsNil() {
-		return fmt.Errorf("The parameter shoud be pointer to struct or map[string]any")
+		return xerr.Errorf("The parameter shoud be pointer to struct or map[string]any")
 	}
 
 	var err error
@@ -31,7 +31,7 @@ func (args Arguments) CopyTo(x any) error {
 	case reflect.Struct:
 		err = args.ArgStruct(v.Interface())
 	default:
-		err = fmt.Errorf("The parameter shoud be pointer to struct or map[string]any")
+		err = xerr.Errorf("The parameter shoud be pointer to struct or map[string]any")
 	}
 	return err
 }
@@ -123,18 +123,18 @@ func (args Arguments) GetBlobDefault(name string, dft []byte) []byte {
 func (args Arguments) checkInterface(name string, kind reflect.Kind, p any) (any, reflect.Value, error) {
 	x := reflect.ValueOf(p)
 	if x.Kind() != reflect.Pointer || x.IsNil() || x.Elem().Kind() != kind {
-		return nil, reflect.Value{}, fmt.Errorf("The second parameter should be pointer to %v", kind)
+		return nil, reflect.Value{}, xerr.Errorf("The second parameter should be pointer to %v", kind)
 	}
 
 	v, ok := args[name]
 	if !ok {
-		return nil, reflect.Value{}, fmt.Errorf("No such name \"%s\" found in the arguments", name)
+		return nil, reflect.Value{}, xerr.Errorf("No such name \"%s\" found in the arguments", name)
 	}
 
 	k := reflect.TypeOf(v).Kind()
 	if k != kind {
 		if !(kind == reflect.Struct && k == reflect.Map) {
-			return nil, reflect.Value{}, fmt.Errorf("The value of \"%s\" in the arguments has a incompatible kind (%s) other than %v", name, k, kind)
+			return nil, reflect.Value{}, xerr.Errorf("The value of \"%s\" in the arguments has a incompatible kind (%s) other than %v", name, k, kind)
 		}
 	}
 
@@ -175,7 +175,7 @@ func (args Arguments) GetStruct(name string, p any) error {
 			if f.OmitEmpty {
 				continue
 			} else {
-				return fmt.Errorf("No value for struct field \"%s\"", f.Name)
+				return xerr.Errorf("No value for struct field \"%s\"", f.Name)
 			}
 		}
 
@@ -197,7 +197,7 @@ func (args Arguments) SetArgStruct(p any) error {
 	}
 
 	if x.Kind() != reflect.Struct {
-		return fmt.Errorf("The parameter should be struct or pointer to struct")
+		return xerr.Errorf("The parameter should be struct or pointer to struct")
 	}
 
 	fields := vbs.GetStructFieldInfos(x.Type())
@@ -219,7 +219,7 @@ func (args Arguments) SetArgStruct(p any) error {
 func (args Arguments) ArgStruct(p any) error {
 	x := reflect.ValueOf(p)
 	if x.Kind() != reflect.Pointer || x.IsNil() || x.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("The parameter should be pointer to struct")
+		return xerr.Errorf("The parameter should be pointer to struct")
 	}
 	x = x.Elem()
 
@@ -231,7 +231,7 @@ func (args Arguments) ArgStruct(p any) error {
 			if f.OmitEmpty {
 				continue
 			} else {
-				return fmt.Errorf("Parameter \"%s\" missing", f.Name)
+				return xerr.Errorf("Parameter \"%s\" missing", f.Name)
 			}
 		}
 
@@ -250,7 +250,7 @@ func assignInt(lhs, rhs reflect.Value) error {
 		i := rhs.Int()
 		lhs.SetInt(i)
 		if lhs.Int() != i {
-			return fmt.Errorf("Can't assign %v(%d) to %v", k, i, lhs.Kind())
+			return xerr.Errorf("Can't assign %v(%d) to %v", k, i, lhs.Kind())
 		}
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
@@ -258,10 +258,10 @@ func assignInt(lhs, rhs reflect.Value) error {
 		i := int64(u)
 		lhs.SetInt(i)
 		if i < 0 || lhs.Int() != i {
-			return fmt.Errorf("Can't assign %v(%d) to %v", k, u, lhs.Kind())
+			return xerr.Errorf("Can't assign %v(%d) to %v", k, u, lhs.Kind())
 		}
 	default:
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 	return nil
 }
@@ -273,16 +273,16 @@ func assignUint(lhs, rhs reflect.Value) error {
 		u := uint64(i)
 		lhs.SetUint(u)
 		if i < 0 || lhs.Uint() != u {
-			return fmt.Errorf("Can't assign %v(%d) to %v", k, i, lhs.Kind())
+			return xerr.Errorf("Can't assign %v(%d) to %v", k, i, lhs.Kind())
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		u := rhs.Uint()
 		lhs.SetUint(u)
 		if lhs.Uint() != u {
-			return fmt.Errorf("Can't assign %v(%d) to %v", k, u, lhs.Kind())
+			return xerr.Errorf("Can't assign %v(%d) to %v", k, u, lhs.Kind())
 		}
 	default:
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 	return nil
 }
@@ -291,7 +291,7 @@ func assignString(lhs, rhs reflect.Value) error {
 	if k := rhs.Kind(); k == reflect.String {
 		lhs.SetString(rhs.String())
 	} else {
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 	return nil
 }
@@ -300,7 +300,7 @@ func assignBool(lhs, rhs reflect.Value) error {
 	if k := rhs.Kind(); k == reflect.Bool {
 		lhs.SetBool(rhs.Bool())
 	} else {
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 	return nil
 }
@@ -313,12 +313,12 @@ func assignFloat(lhs, rhs reflect.Value) error {
 		f := rhs.Float()
 		if lhs.Kind() != reflect.Float64 {
 			if math.Abs(f) > math.MaxFloat32 {
-				return fmt.Errorf("Can't assign %v(%v) to %v", k, f, lhs.Kind())
+				return xerr.Errorf("Can't assign %v(%v) to %v", k, f, lhs.Kind())
 			}
 		}
 		lhs.SetFloat(f)
 	default:
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 	return nil
 }
@@ -331,12 +331,12 @@ func assignComplex(lhs, rhs reflect.Value) error {
 		c := rhs.Complex()
 		if lhs.Kind() != reflect.Complex128 {
 			if math.Abs(real(c)) > math.MaxFloat32 || math.Abs(imag(c)) > math.MaxFloat32 {
-				return fmt.Errorf("Can't assign %v(%v) to %v", k, c, lhs.Kind())
+				return xerr.Errorf("Can't assign %v(%v) to %v", k, c, lhs.Kind())
 			}
 		}
 		lhs.SetComplex(c)
 	default:
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 	return nil
 }
@@ -349,14 +349,14 @@ func assignArray(lhs, rhs reflect.Value) error {
 		break
 	case reflect.Slice:
 		if lhs.Len() != rhs.Len() {
-			return fmt.Errorf("Can't assign [%d]%v to [%d]%v", rhs.Len(), rek, lhs.Len(), lek)
+			return xerr.Errorf("Can't assign [%d]%v to [%d]%v", rhs.Len(), rek, lhs.Len(), lek)
 		}
 		if lek == reflect.Uint8 && rek == reflect.Uint8 {
 			lhs.Slice(0, lhs.Len()).SetBytes(rhs.Bytes())
 		}
 		return nil
 	default:
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 
 	for i := 0; i < lhs.Len(); i++ {
@@ -375,7 +375,7 @@ func assignSlice(lhs, rhs reflect.Value) error {
 			return nil
 		}
 	default:
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 
 	for i := 0; i < rhs.Len(); i++ {
@@ -405,7 +405,7 @@ func assignMap(lhs, rhs reflect.Value) error {
 		if k == reflect.Struct {
 			return assignMapFromStruct(lhs, rhs)
 		}
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 
 	lkeyType := lhs.Type().Key()
@@ -431,12 +431,12 @@ func assignMap(lhs, rhs reflect.Value) error {
 
 func assignMapFromStruct(lhs, rhs reflect.Value) error {
 	if k := rhs.Kind(); k != reflect.Struct {
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 
 	lkeyType := lhs.Type().Key()
 	if lkeyType.Kind() != reflect.String {
-		return fmt.Errorf("To assign map from struct, the kind of map key must be string")
+		return xerr.Errorf("To assign map from struct, the kind of map key must be string")
 	}
 	lelemType := lhs.Type().Elem()
 
@@ -464,12 +464,12 @@ func assignMapFromStruct(lhs, rhs reflect.Value) error {
 
 func assignStructFromMap(lhs, rhs reflect.Value) error {
 	if k := rhs.Kind(); k != reflect.Map {
-		return fmt.Errorf("Can't assign %v to %v", k, lhs.Kind())
+		return xerr.Errorf("Can't assign %v to %v", k, lhs.Kind())
 	}
 
 	rkeyType := rhs.Type().Key()
 	if rkeyType.Kind() != reflect.String {
-		return fmt.Errorf("To assign struct from map, the kind of map key must be string")
+		return xerr.Errorf("To assign struct from map, the kind of map key must be string")
 	}
 
 	fields := vbs.GetStructFieldInfos(lhs.Type())
@@ -501,7 +501,7 @@ func dereference(v reflect.Value) (reflect.Value, error) {
 	}
 
 	if !v.IsValid() {
-		return reflect.Value{}, fmt.Errorf("Value can't be nil pointer or interface")
+		return reflect.Value{}, xerr.Errorf("Value can't be nil pointer or interface")
 	}
 
 	return v.Elem(), nil
@@ -551,12 +551,12 @@ func assignValue(lhs, rhs reflect.Value) error {
 		if lhs.NumMethod() == 0 {
 			lhs.Set(rhs)
 		} else {
-			err = fmt.Errorf("lhs of assignment can't be non-empty interface")
+			err = xerr.Errorf("lhs of assignment can't be non-empty interface")
 		}
 	case reflect.Pointer:
-		err = fmt.Errorf("lhs of assignment can't be pointer")
+		err = xerr.Errorf("lhs of assignment can't be pointer")
 	default:
-		err = fmt.Errorf("lhs of assignment can't be %v", lk)
+		err = xerr.Errorf("lhs of assignment can't be %v", lk)
 	}
 
 	return err
@@ -615,7 +615,7 @@ func checkMap(v reflect.Value) error {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 	case reflect.String:
 	default:
-		return fmt.Errorf("Only integer or string can be the key of a map")
+		return xerr.Errorf("Only integer or string can be the key of a map")
 	}
 	return nil
 }
