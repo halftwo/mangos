@@ -14,22 +14,34 @@ type XErr interface {
 	PrintTrace(w io.Writer)
 }
 
+// If cause is nil, return nil,
+// else add the msg to the msgtrace
 func Trace(cause error, args ...any) XErr {
+	if cause == nil {
+		return nil
+	}
 	msg := fmt.Sprint(args...)
-	return doTrace(cause, msg)
+	return _traceOrNew(cause, msg)
 }
 
+// If cause is nil, return nil,
+// else add the msg to the msgtrace
 func Tracef(cause error, format string, args ...any) XErr {
+	if cause == nil {
+		return nil
+	}
 	msg := fmt.Sprintf(format, args...)
-	return doTrace(cause, msg)
+	return _traceOrNew(cause, msg)
 }
 
+// Make a brand new XErr
 func Errorf(format string, args ...any) XErr {
 	msg := fmt.Sprintf(format, args...)
-	return doTrace(nil, msg)
+	return _traceOrNew(nil, msg)
 }
 
-func doTrace(cause any, msg string) *_XErr {
+// If cause == nil or not *_XErr, new a *_XErr
+func _traceOrNew(cause any, msg string) *_XErr {
 	err, ok := cause.(*_XErr)
 	if !ok {
 		err = newXErr(cause)
