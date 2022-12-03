@@ -94,13 +94,17 @@ type _TraceItem struct {
 	msg string
 }
 
+// Each line of trace begins with one of the letters: T, X, C
+// X means where the XErr object is first created (by xerr.Trace or xerr.Errorf)
+// T means the following xerr.Trace()'s that call on the XErr object
+// C means the call stacks to the X point
 func (err *_XErr) PrintTrace(w io.Writer) {
 	for i := len(err.msgtrace) - 1; i >= 0; i-- {
 		ti := &err.msgtrace[i]
 		if i > 0 {
-			w.Write([]byte(" v "))
+			w.Write([]byte(" T "))
 		} else {
-			w.Write([]byte(" O "))
+			w.Write([]byte(" X "))
 		}
 		printLocus(w, ti.pc)
 		if len(ti.msg) > 0 {
@@ -110,7 +114,7 @@ func (err *_XErr) PrintTrace(w io.Writer) {
 	}
 	if len(err.stacktrace) > 0 {
 		for _, pc := range err.stacktrace {
-			w.Write([]byte(" ^ "))
+			w.Write([]byte(" C "))
 			printLocus(w, pc)
 			w.Write([]byte("\n"))
 		}
@@ -139,7 +143,7 @@ func (err *_XErr) Format(s fmt.State, verb rune) {
 			}
 			if err.cause != nil {
 				s.Write([]byte(" --- "))
-				fmt.Fprintf(s, "%#v", err.cause)
+				fmt.Fprintf(s, "%v", err.cause)
 			}
 		}
 	}
