@@ -32,12 +32,12 @@ func (ep *EasyParser) Next(sep string) (value string) {
 		k = strings.Index(ep.Str, sep)
 	}
 
-	if k > 0 {
-		value = ep.Str[:k]
-		ep.Str = ep.Str[k+len(sep):]
-	} else {
+	if k < 0 {
 		value = ep.Str
 		ep.Str = ""
+	} else {
+		value = ep.Str[:k]
+		ep.Str = ep.Str[k+len(sep):]
 	}
 	return
 }
