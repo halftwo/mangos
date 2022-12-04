@@ -11,12 +11,6 @@ import (
 	Adapter.AddServant
 	...
 	Adapter.Activate
-
-   Client EntreeFunction procedure:
-  	Engine.StringToProxy
-	Proxy.Invoke
-	...
-	Engine.Shutdown
 */
 type EntreeFunction func(engine Engine, args []string) error
 
@@ -30,16 +24,24 @@ type EntreeFunction func(engine Engine, args []string) error
 type SignalHandler func(sigChan <-chan os.Signal)
 
 
-// Run the entree function and Engine.WaitForShutdown()
-func Start(entree EntreeFunction) error {
+func Run(entree EntreeFunction) error {
+	engine, err := Start(entree)
+	if err != nil {
+		return err
+	}
+	engine.WaitForShutdown()
+	return nil
+}
+
+func Start(entree EntreeFunction) (Engine, error) {
 	return start_setting_signal(entree, nil, nil)
 }
 
-func StartSetting(entree EntreeFunction, setting Setting) error {
+func StartSetting(entree EntreeFunction, setting Setting) (Engine, error) {
 	return start_setting_signal(entree, setting, nil)
 }
 
-func StartSettingSignal(entree EntreeFunction, setting Setting, sigFun SignalHandler) error {
+func StartSettingSignal(entree EntreeFunction, setting Setting, sigFun SignalHandler) (Engine, error) {
 	return start_setting_signal(entree, setting, sigFun)
 }
 

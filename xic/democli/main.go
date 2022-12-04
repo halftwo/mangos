@@ -8,7 +8,7 @@ import (
 	"halftwo/mangos/xic"
 )
 
-func run(engine xic.Engine, args []string) error {
+func run_xic(engine xic.Engine, args []string) error {
 	secretBox, err := xic.NewSecretBox("@++=hello:world")
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func run(engine xic.Engine, args []string) error {
 
 func main() {
 	start := time.Now()
-	xic.Start(run)
+	xic.Run(run)
 	fmt.Println("Time elapsed:", float32(time.Now().Sub(start))/float32(time.Second))
 }
 

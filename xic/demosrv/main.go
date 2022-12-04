@@ -58,7 +58,7 @@ func (srv *_DemoServant) Xic_time(cur xic.Current, in _TimeInArgs, out *_TimeOut
 }
 
 
-func run(engine xic.Engine, args []string) error {
+func starter(engine xic.Engine, args []string) error {
 	adapter, err := engine.CreateAdapter("")
 	if err != nil {
 		return err
@@ -71,6 +71,6 @@ func run(engine xic.Engine, args []string) error {
 }
 
 func main() {
-	xic.Start(run)
+	xic.Run(starter)
 }
 

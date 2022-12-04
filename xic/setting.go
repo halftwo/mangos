@@ -22,7 +22,7 @@ func NewSetting() Setting {
 
 func NewSettingFile(filename string) (Setting, error) {
 	st := NewSetting()
-	err := st.LoadFile(filepath.FromSlash(filename))
+	err := st.LoadFile(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -30,6 +30,7 @@ func NewSettingFile(filename string) (Setting, error) {
 }
 
 func (st *_Setting) LoadFile(filename string) error {
+	filename = filepath.Clean(filename)
 	fp, err := os.Open(filename)
 	if err != nil {
 		return xerr.Trace(err)
@@ -142,7 +143,11 @@ func (st *_Setting) Pathname(name string) string {
 }
 
 func (st *_Setting) PathnameDefault(name string, dft string) string {
-	s := filepath.FromSlash(st.GetDefault(name, dft))
+	s := st.GetDefault(name, dft)
+	if s == "" {
+		return s
+	}
+	s = filepath.FromSlash(s)
 	if filepath.IsAbs(s) {
 		return s
 	}

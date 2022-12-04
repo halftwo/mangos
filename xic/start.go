@@ -56,7 +56,7 @@ func usage() {
 }
 
 var started atomic.Int32
-func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalHandler) error {
+func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalHandler) (Engine, error) {
 	if !started.CompareAndSwap(0, 1) {
 		panic("function start_with_setting() can only be called once")
 	}
@@ -71,7 +71,7 @@ func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalH
 		err := setting.LoadFile(configFile)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "ERROR:", err)
-			return err
+			return nil, err
 		}
 	}
 	for k, v := range cfs {
@@ -87,6 +87,10 @@ func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalH
 	signal.Notify(engine.sigChan, os.Interrupt)
 	install_additional_signals(engine)
 
+	if entree == nil {
+		return engine, nil
+	}
+
 	err := entree(engine, args)
 	if err != nil {
 		engine.Shutdown()
@@ -94,9 +98,10 @@ func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalH
 		if configFile == "" && time.Now().Sub(start_time) < time.Second {
 			usage()
 		}
+		engine.WaitForShutdown()
+		engine = nil
 	}
 
-	engine.WaitForShutdown();
-	return err
+	return engine, err
 }
 
