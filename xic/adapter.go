@@ -37,7 +37,7 @@ type _Listener struct {
 func newListener(adapter *_Adapter, ei *EndpointInfo) (*_Listener, error) {
 	listener, err := net.Listen(ei.Proto(), ei.Address())
 	if err != nil {
-		return nil, err
+		return nil, xerr.Trace(err)
 	}
 	l := &_Listener{listener:listener, adapter:adapter, endpoint:ei}
 	return l, nil

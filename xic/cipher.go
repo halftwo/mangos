@@ -81,7 +81,7 @@ func newXicCipher(suite _CipherSuite, keyInfo []byte, isServer bool) (*_Cipher, 
 
 	blockCipher, err := aes.NewCipher(key[:keyLen])
 	if err != nil {
-		return nil, err
+		return nil, xerr.Trace(err)
 	}
 
 	c.ox, err = eax.NewEax(blockCipher)

@@ -32,7 +32,7 @@ func NewSettingFile(filename string) (Setting, error) {
 func (st *_Setting) LoadFile(filename string) error {
 	fp, err := os.Open(filename)
 	if err != nil {
-		return err
+		return xerr.Trace(err)
 	}
 	defer fp.Close()
 
