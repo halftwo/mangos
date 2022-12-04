@@ -80,7 +80,7 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 	if shadow != "" {
 		engine.shadowBox, err = NewShadowBoxFromFile(shadow)
 		if err != nil {
-			dlog.Log("XIC.WARN", "Failed to open shadow file %s", shadow)
+			dlog.Logf("XIC.WARN", "Failed to open shadow file %s", shadow)
 		}
 	}
 
@@ -93,7 +93,7 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 	if secret != "" {
 		engine.secretBox, err = NewSecretBoxFromFile(secret)
 		if err != nil {
-			dlog.Log("XIC.WARN", "Failed to open secret file %s", secret)
+			dlog.Logf("XIC.WARN", "Failed to open secret file %s", secret)
 		}
 	}
 

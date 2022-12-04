@@ -666,17 +666,17 @@ func (con *_Connection) handleQuest(adapter Adapter, quest *_InQuest) {
 
 wrong:
 	if err != nil {
-		dlog.Log("XIC.EXCEPT", "%s::%s return error --- %s", quest.service, quest.method, err.Error())
+		dlog.Logf("XIC.EXCEPT", "%s::%s return error --- %s", quest.service, quest.method, err.Error())
 	}
 
 	if cli_oneway {
 		con.numQ.Add(-1)
 		if !srv_oneway {
-			dlog.Log("XIC.WARN", "%s::%s --- Twoway method invoked as oneway, con=%v", quest.service, quest.method, con)
+			dlog.Logf("XIC.WARN", "%s::%s --- Twoway method invoked as oneway, con=%v", quest.service, quest.method, con)
 		}
 	} else {
 		if srv_oneway {
-			dlog.Log("XIC.WARN", "%s::%s --- Oneway method invoked as twoway, con=%v", quest.service, quest.method, con)
+			dlog.Logf("XIC.WARN", "%s::%s --- Oneway method invoked as twoway, con=%v", quest.service, quest.method, con)
 			if err == nil {
 				answer = newOutAnswerNormal(quest.txid, struct{}{})
 			}
@@ -706,7 +706,7 @@ func (con *_Connection) handleAnswer(answer *_InAnswer) {
 	con.mutex.Unlock()
 
 	if !ok {
-		dlog.Log("XIC.WARN", "Unknown answer with txid=%d", answer.txid)
+		dlog.Logf("XIC.WARN", "Unknown answer with txid=%d", answer.txid)
 		return
 	}
 
@@ -826,7 +826,7 @@ func (con *_Connection) recv_msg(must bool) (msg _Message) {
 
 	header := buf2header(headbuf[:])
 	if err = checkHeader(header); err != nil {
-		dlog.Log("XIC.WARN", "Invalid xic header %v", header)
+		dlog.Logf("XIC.WARN", "Invalid xic header %v", header)
 		goto done
 	}
 
@@ -991,7 +991,7 @@ func (con *_Connection) check_doable(quest *_InQuest) bool {
 
 	if err != nil {
 		doit = false
-		dlog.Log("XIC.WARN", "%s", err.Error())
+		dlog.Logf("XIC.WARN", "%s", err.Error())
 
 		if quest.txid == 0 {
 			con.numQ.Add(-1)

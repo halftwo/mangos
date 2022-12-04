@@ -16,6 +16,17 @@ import (
 	"time"
 )
 
+type Tag string
+
+const (
+	ALERT	Tag	= "ALERT"
+	ERROR		= "ERROR"
+	WARN		= "WARN"
+	NOTICE		= "NOTICE"
+	INFO		= "INFO"
+	DEBUG		= "DEBUG"
+)
+
 const (
 	_RECORD_TYPE_RAW	= 0
 	_RECORD_VERSION		= 6
@@ -74,11 +85,11 @@ const (
 	LOCUS_MAX       = 127
 )
 
-func (rec *_RecordMan) SetIdentityTagLocus(identity, tag, locus string) {
+func (rec *_RecordMan) SetIdentityTagLocus(identity string, tag Tag, locus string) {
 	rec.putMaxNoCheck(identity, IDENTITY_MAX)
 	rec.identityEnd = uint8(rec.off - _RECORD_HEAD_SIZE)
 	rec.writeByteNoCheck(' ')
-	rec.putMaxNoCheck(tag, TAG_MAX)
+	rec.putMaxNoCheck(string(tag), TAG_MAX)
 	rec.tagEnd = uint8(rec.off - _RECORD_HEAD_SIZE)
 	rec.writeByteNoCheck(' ')
 	rec.putMaxNoCheck(locus, LOCUS_MAX)
@@ -247,14 +258,24 @@ func getLocus(skip int) (locus string) {
 // Log send a dlog to dlogd. 
 // identity is from the logger's default.
 // locus is from runtime.Caller()
-func (lg *Logger) Log(tag string, format string, a ...any) {
+func (lg *Logger) Log(tag Tag, a ...any) {
 	var locus string
 	if lg == theLogger {
 		locus = getLocus(2)
 	} else {
 		locus = getLocus(1)
 	}
-	lg.Allog(lg.identity, tag, locus, format, a...)
+	lg.Allog(lg.identity, tag, locus, a...)
+}
+
+func (lg *Logger) Logf(tag Tag, format string, a ...any) {
+	var locus string
+	if lg == theLogger {
+		locus = getLocus(2)
+	} else {
+		locus = getLocus(1)
+	}
+	lg.Allogf(lg.identity, tag, locus, format, a...)
 }
 
 // NB: the rec content is destroyed in this function
@@ -273,15 +294,27 @@ func (lg *Logger) printAlt(rec *_RecordMan) {
 
 // Allog send a dlog to dlogd. 
 // identity and locus are also specified in the arguments.
-func (lg *Logger) Allog(identity string, tag string, locus string, format string, a ...any) {
+func (lg *Logger) Allog(identity string, tag Tag, locus string, a ...any) {
+	rec := recPool.Get().(*_RecordMan)
+	defer recPool.Put(rec)
+
+	rec.Reset()
+	rec.SetIdentityTagLocus(identity, tag, locus)
+	fmt.Fprint(rec, a...)
+	lg.dolog(rec)
+}
+
+func (lg *Logger) Allogf(identity string, tag Tag, locus string, format string, a ...any) {
 	rec := recPool.Get().(*_RecordMan)
 	defer recPool.Put(rec)
 
 	rec.Reset()
 	rec.SetIdentityTagLocus(identity, tag, locus)
 	fmt.Fprintf(rec, format, a...)
-	buf := rec.Bytes()
+	lg.dolog(rec)
+}
 
+func (lg *Logger) dolog(rec *_RecordMan) {
 	var do_alt bool
 	if lg.option & OPT_NONET == 0 {
 		var err error
@@ -296,6 +329,7 @@ func (lg *Logger) Allog(identity string, tag string, locus string, format string
 			}
 		}
 
+		buf := rec.Bytes()
 		_, err = con.Write(buf)
 		if err != nil {
 			lg.shut(con)
@@ -376,11 +410,19 @@ func SetAltWriter(w io.Writer) {
 	theLogger.SetAltWriter(w)
 }
 
-func Log(tag string, format string, a ...any) {
-	theLogger.Log(tag, format, a...)
+func Log(tag Tag, a ...any) {
+	theLogger.Log(tag, a...)
 }
 
-func Allog(identity string, tag string, locus string, format string, a ...any) {
-	theLogger.Allog(identity, tag, locus, format, a...)
+func Logf(tag Tag, format string, a ...any) {
+	theLogger.Logf(tag, format, a...)
+}
+
+func Allog(identity string, tag Tag, locus string, a ...any) {
+	theLogger.Allog(identity, tag, locus, a...)
+}
+
+func Allogf(identity string, tag Tag, locus string, format string, a ...any) {
+	theLogger.Allogf(identity, tag, locus, format, a...)
 }
 

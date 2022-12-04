@@ -15,9 +15,9 @@ func TestLogger(t *testing.T) {
 	SetOption(OPT_ALTERR|OPT_ALTOUT)
 	nw := NullWriter{}
 	SetAltWriter(nw)
-	Log("ERROR", "%g", 12345.67890)
+	Logf(ERROR, "%g", 12345.67890)
 	SetAltWriter(nil)
-	Log("ERROR", "%g", 12345.67890)
+	Logf(ERROR, "%g", 12345.67890)
 }
 
 func BenchmarkTimeString(b *testing.B) {
