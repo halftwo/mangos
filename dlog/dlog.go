@@ -190,6 +190,7 @@ const (
 	OPT_ALTOUT	= 0x01	// Always print to alternative output in addition to write to dlogd.
 	OPT_ALTERR	= 0x02	// If failed to connect dlogd, print to the alternative output.
 	OPT_TCP		= 0x04	// Use TCP instead of UDP to connect dlogd server.
+	OPT_NONET	= 0x08	// DON'T write to dlogd server.
 )
 
 func (lg *Logger) SetOption(option int) {
@@ -259,7 +260,7 @@ func (lg *Logger) Log(tag string, format string, a ...any) {
 // NB: the rec content is destroyed in this function
 func (lg *Logger) printAlt(rec *_RecordMan) {
 	var ts[18] byte
-	k := timeBuf(time.Now(), ts[:])
+	k := timeNoZone(ts[:], time.Now())
 	n := (_RECORD_HEAD_SIZE + int(rec.identityEnd)) - k
 	buf := rec.Bytes()[n:]
 	copy(buf, ts[:k])
@@ -281,29 +282,31 @@ func (lg *Logger) Allog(identity string, tag string, locus string, format string
 	fmt.Fprintf(rec, format, a...)
 	buf := rec.Bytes()
 
-	var err error
-	do_alt := false
-	if lg.option & OPT_ALTOUT != 0 {
-		do_alt = true
-	}
+	var do_alt bool
+	if lg.option & OPT_NONET == 0 {
+		var err error
+		con, ok := lg.con.Load().(net.Conn)
+		if !ok {
+			con = lg.dial()
+			if con == nil {
+				if lg.option & OPT_ALTERR != 0 {
+					do_alt = true
+					goto net_done
+				}
+			}
+		}
 
-	con, ok := lg.con.Load().(net.Conn)
-	if !ok {
-		con = lg.dial()
-		if con == nil {
+		_, err = con.Write(buf)
+		if err != nil {
+			lg.shut(con)
 			if lg.option & OPT_ALTERR != 0 {
 				do_alt = true
-				goto net_done
 			}
 		}
 	}
 
-	_, err = con.Write(buf)
-	if err != nil {
-		lg.shut(con)
-		if lg.option & OPT_ALTERR != 0 {
-			do_alt = true
-		}
+	if lg.option & OPT_ALTOUT != 0 {
+		do_alt = true
 	}
 
 net_done:
