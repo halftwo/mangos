@@ -1,25 +1,19 @@
-package dlog_test
+package dlog
 
 import (
 	"testing"
-
-	"time"
-	"halftwo/mangos/dlog"
 )
 
-func Test1(t *testing.T) {
-	now := time.Now()
-	loc := time.FixedZone("TEST", -30*60)
-	t.Log(dlog.TimeString(now))
-	t.Log(dlog.TimeString(now.In(loc)))
-	dlog.SetOption(dlog.OPT_STDERR)
-	dlog.Log("XXX", "hello, %s!\r\n\r\n", "world")
+type NullWriter struct {}
+
+func (NullWriter) Write(data []byte) (int, error) {
+	return len(data), nil
 }
 
-func BenchmarkTimeString(b *testing.B) {
-	tm := time.Now()
-	for i := 0; i < b.N; i++ {
-		dlog.TimeString(tm)
-	}
+func TestLogger(t *testing.T) {
+	SetOption(OPT_ALTERR|OPT_ALTOUT)
+	nw := NullWriter{}
+	SetAltWriter(nw)
+	Log("ERROR", "%g", 12345.67890)
 }
 

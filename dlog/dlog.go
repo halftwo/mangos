@@ -4,6 +4,7 @@
 package dlog
 
 import (
+	"io"
 	"net"
 	"fmt"
 	"os"
@@ -23,6 +24,8 @@ const (
 	_RECORD_BIG_ENDIAN	= 0x08
 )
 
+const DLOG_RECORD_SIZE		= 3984	// should be less than 3990
+
 // big endian byte order
 type _RecordHeadV6 struct {
 	size uint16	// include the size itself and trailing '\0' 
@@ -36,10 +39,12 @@ type _RecordHeadV6 struct {
 type _RecordMan struct {
 	pid uint32
 	ttev byte
+	identityEnd uint8
+	tagEnd uint8
 	locusEnd uint8
-	size uint16
 	off int
-	buf [4000]byte
+	size uint16
+	buf [DLOG_RECORD_SIZE]byte
 }
 
 var recPool = sync.Pool{
@@ -70,31 +75,35 @@ const (
 )
 
 func (rec *_RecordMan) SetIdentityTagLocus(identity, tag, locus string) {
-	rec.putMax(identity, IDENTITY_MAX)
-	rec.WriteByte(' ')
-	rec.putMax(tag, TAG_MAX)
-	rec.WriteByte(' ')
-	rec.putMax(locus, LOCUS_MAX)
+	rec.putMaxNoCheck(identity, IDENTITY_MAX)
+	rec.identityEnd = uint8(rec.off - _RECORD_HEAD_SIZE)
+	rec.writeByteNoCheck(' ')
+	rec.putMaxNoCheck(tag, TAG_MAX)
+	rec.tagEnd = uint8(rec.off - _RECORD_HEAD_SIZE)
+	rec.writeByteNoCheck(' ')
+	rec.putMaxNoCheck(locus, LOCUS_MAX)
 	rec.locusEnd = uint8(rec.off - _RECORD_HEAD_SIZE)
-	rec.WriteByte(' ')
+	rec.writeByteNoCheck(' ')
 }
 
-func (rec *_RecordMan) putMax(s string, max int) {
+func (rec *_RecordMan) writeByteNoCheck(b byte) {
+	rec.buf[rec.off] = b
+	rec.off++
+}
+
+func (rec *_RecordMan) putMaxNoCheck(s string, max int) {
 	k := len(s)
 	if k > max {
 		k = max
 	}
 
-	if rec.off < len(rec.buf) {
-		if k > 0 {
-			buf := []byte(s)
-			copy(rec.buf[rec.off:], buf[:k])
-		} else {
-			rec.buf[rec.off] = '-'
-			k = 1
-		}
+	if k > 0 {
+		copy(rec.buf[rec.off:], s[:k])
+		rec.off += k
+	} else {
+		rec.buf[rec.off] = '-'
+		rec.off++
 	}
-	rec.off += k
 }
 
 func (rec *_RecordMan) Write(buf []byte) (int, error) {
@@ -104,14 +113,6 @@ func (rec *_RecordMan) Write(buf []byte) (int, error) {
 	k := len(buf)
 	rec.off += k
 	return k, nil
-}
-
-func (rec *_RecordMan) WriteByte(b byte) error {
-	if rec.off < len(rec.buf) {
-		rec.buf[rec.off] = b
-	}
-	rec.off++
-	return nil
 }
 
 func (rec *_RecordMan) Bytes() []byte {
@@ -139,7 +140,7 @@ func (rec *_RecordMan) Bytes() []byte {
 		size = len(rec.buf)
 	}
 	rec.size = uint16(size)
-	rec.buf[size - 1] = 0
+	rec.buf[size - 1] = 0	// trailing '\0'
 
 	rec.buf[0] = byte(size >> 8)
 	rec.buf[1] = byte(size)
@@ -159,18 +160,19 @@ func (rec *_RecordMan) Truncated() bool {
 	return rec.off >= len(rec.buf)
 }
 
-var theLogger = NewDlogger("")
+var theLogger = NewLogger("")
 
-type Dlogger struct {
+type Logger struct {
 	option uint32
 	identity string
 	con atomic.Value	// net.Conn
 	lastFailTime time.Time
+	altOut io.Writer
 	mutex sync.Mutex
 }
 
-func NewDlogger(identity string) *Dlogger {
-	var id = identity
+func NewLogger(identity string) *Logger {
+	id := identity
 	if identity == "" {
 		id = os.Args[0]
 		var i = strings.LastIndexByte(id, os.PathSeparator)
@@ -179,18 +181,18 @@ func NewDlogger(identity string) *Dlogger {
 		}
 	}
 
-	var lg = &Dlogger{identity:id}
+	lg := &Logger{identity:id, altOut:os.Stderr}
 	return lg
 }
 
 // Options for dlog
 const (
-	OPT_STDERR	= 0x01	// Always print to stderr in addition to write to dlogd.
-	OPT_PERROR	= 0x02	// If failed to connect dlogd, print to stderr.
+	OPT_ALTOUT	= 0x01	// Always print to alternative output in addition to write to dlogd.
+	OPT_ALTERR	= 0x02	// If failed to connect dlogd, print to the alternative output.
 	OPT_TCP		= 0x04	// Use TCP instead of UDP to connect dlogd server.
 )
 
-func (lg *Dlogger) SetOption(option int) {
+func (lg *Logger) SetOption(option int) {
 	opt := uint32(option)
 	old := atomic.SwapUint32(&lg.option, opt)
 	old_tcp := old & OPT_TCP
@@ -201,6 +203,32 @@ func (lg *Dlogger) SetOption(option int) {
 			lg.shut(c.(net.Conn))
 		}
 	}
+}
+
+func (lg *Logger) Option() int {
+	return int(atomic.LoadUint32(&lg.option))
+}
+
+func (lg *Logger) SetIdentity(id string) {
+	lg.mutex.Lock()
+	lg.identity = id
+	lg.mutex.Unlock()
+}
+
+func (lg *Logger) Identity() string {
+	lg.mutex.Lock()
+	id := lg.identity
+	lg.mutex.Unlock()
+	return id
+}
+
+func (lg *Logger) SetAltWriter(w io.Writer) {
+	if w == nil {
+		w = os.Stderr
+	}
+	lg.mutex.Lock()
+	lg.altOut = w
+	lg.mutex.Unlock()
 }
 
 func getLocus(skip int) (locus string) {
@@ -215,40 +243,36 @@ func getLocus(skip int) (locus string) {
 	return
 }
 
-func TimeString(t time.Time) string {
-	var buf [24]byte
-	b := t.AppendFormat(buf[:0], "060102+150405-0700")
-	b[6] = "umtwrfs"[t.Weekday()]
-
-	// Remove trailing "00"
-	n := len(b)
-	if (b[n-2] == '0' && b[n-1] == '0') {
-		b = b[:n-2]
-	}
-	return string(b)
-}
-
 // Log send a dlog to dlogd. 
 // identity is from the logger's default.
 // locus is from runtime.Caller()
-func (lg *Dlogger) Log(tag string, format string, a ...any) {
+func (lg *Logger) Log(tag string, format string, a ...any) {
 	var locus string
 	if lg == theLogger {
 		locus = getLocus(2)
 	} else {
 		locus = getLocus(1)
 	}
-	lg.XLog(lg.identity, tag, locus, format, a...)
+	lg.Allog(lg.identity, tag, locus, format, a...)
 }
 
-func (lg *Dlogger) printStderr(rec *_RecordMan) {
-	ts := TimeString(time.Now())
-	fmt.Fprintf(os.Stderr, "%s :: %d+%d %s\n", ts, rec.pid, 0, rec.BodyBytes())
+// NB: the rec content is destroyed in this function
+func (lg *Logger) printAlt(rec *_RecordMan) {
+	var ts[18] byte
+	k := timeBuf(time.Now(), ts[:])
+	n := (_RECORD_HEAD_SIZE + int(rec.identityEnd)) - k
+	buf := rec.Bytes()[n:]
+	copy(buf, ts[:k])
+	buf[len(buf)-1] = '\n'	// replace the trailing '\0' with '\n'
+
+	lg.mutex.Lock()
+	lg.altOut.Write(buf)
+	lg.mutex.Unlock()
 }
 
-// XLog send a dlog to dlogd. 
+// Allog send a dlog to dlogd. 
 // identity and locus are also specified in the arguments.
-func (lg *Dlogger) XLog(identity string, tag string, locus string, format string, a ...any) {
+func (lg *Logger) Allog(identity string, tag string, locus string, format string, a ...any) {
 	rec := recPool.Get().(*_RecordMan)
 	defer recPool.Put(rec)
 
@@ -257,38 +281,38 @@ func (lg *Dlogger) XLog(identity string, tag string, locus string, format string
 	fmt.Fprintf(rec, format, a...)
 	buf := rec.Bytes()
 
-	perror_done := false
-	if lg.option & OPT_STDERR != 0 {
-		perror_done = true
-		lg.printStderr(rec)
+	var err error
+	do_alt := false
+	if lg.option & OPT_ALTOUT != 0 {
+		do_alt = true
 	}
 
-	var con net.Conn
-	c := lg.con.Load()
-	if c != nil {
-		con = c.(net.Conn)
-	} else {
+	con, ok := lg.con.Load().(net.Conn)
+	if !ok {
 		con = lg.dial()
 		if con == nil {
-			if (lg.option & OPT_PERROR != 0) && !perror_done {
-				perror_done = true
-				lg.printStderr(rec)
+			if lg.option & OPT_ALTERR != 0 {
+				do_alt = true
+				goto net_done
 			}
-			return
 		}
 	}
 
-	_, err := con.Write(buf)
+	_, err = con.Write(buf)
 	if err != nil {
 		lg.shut(con)
-		if (lg.option & OPT_PERROR != 0) && !perror_done {
-			perror_done = true
-			lg.printStderr(rec)
+		if lg.option & OPT_ALTERR != 0 {
+			do_alt = true
 		}
+	}
+
+net_done:
+	if do_alt {
+		lg.printAlt(rec)
 	}
 }
 
-func (lg *Dlogger) dial() net.Conn {
+func (lg *Logger) dial() net.Conn {
 	lg.mutex.Lock()
 	defer lg.mutex.Unlock()
 
@@ -317,7 +341,7 @@ func (lg *Dlogger) dial() net.Conn {
 	return con
 }
 
-func (lg *Dlogger) shut(con net.Conn) {
+func (lg *Logger) shut(con net.Conn) {
 	con.Close()
 
 	lg.mutex.Lock()
@@ -333,11 +357,27 @@ func SetOption(option int) {
 	theLogger.SetOption(option)
 }
 
+func Option() int {
+	return theLogger.Option()
+}
+
+func SetIdentity(id string) {
+	theLogger.SetIdentity(id)
+}
+
+func Identity() string {
+	return theLogger.Identity()
+}
+
+func SetAltWriter(w io.Writer) {
+	theLogger.SetAltWriter(w)
+}
+
 func Log(tag string, format string, a ...any) {
 	theLogger.Log(tag, format, a...)
 }
 
-func XLog(identity string, tag string, locus string, format string, a ...any) {
-	theLogger.XLog(identity, tag, locus, format, a...)
+func Allog(identity string, tag string, locus string, format string, a ...any) {
+	theLogger.Allog(identity, tag, locus, format, a...)
 }
 
