@@ -221,12 +221,6 @@ func (lg *Logger) Option() int {
 	return int(atomic.LoadUint32(&lg.option))
 }
 
-func (lg *Logger) SetIdentity(id string) {
-	lg.mutex.Lock()
-	lg.identity = id
-	lg.mutex.Unlock()
-}
-
 func (lg *Logger) Identity() string {
 	lg.mutex.Lock()
 	id := lg.identity
@@ -396,10 +390,6 @@ func SetOption(option int) {
 
 func Option() int {
 	return theLogger.Option()
-}
-
-func SetIdentity(id string) {
-	theLogger.SetIdentity(id)
 }
 
 func Identity() string {
