@@ -1,7 +1,6 @@
 package xic
 
 import (
-	"fmt"
 	"sync"
 	"os"
 	"math"
@@ -80,7 +79,7 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 	if shadow != "" {
 		engine.shadowBox, err = NewShadowBoxFromFile(shadow)
 		if err != nil {
-			dlog.Logf("XIC.WARN", "Failed to open shadow file %#s", shadow)
+			dlog.Allogf(dlog.Id(), "XIC.WARN", "", "Failed to open shadow file %#s", shadow)
 		}
 	}
 
@@ -93,7 +92,7 @@ func newEngineSettingName(setting Setting, name string) *_Engine {
 	if secret != "" {
 		engine.secretBox, err = NewSecretBoxFromFile(secret)
 		if err != nil {
-			dlog.Logf("XIC.WARN", "Failed to open secret file %#s", secret)
+			dlog.Allogf(dlog.Id(), "XIC.WARN", "", "Failed to open secret file %#s", secret)
 		}
 	}
 
@@ -255,9 +254,9 @@ func (engine *_Engine) WaitForShutdown() {
 func (engine *_Engine) sig_handler_routine(sigChan <-chan os.Signal) {
 	sig, ok := <-sigChan
 	if ok {
-		fmt.Fprintln(os.Stderr, "XIC: signal", sig.String(), "received, shutting down.")
+		dlog.Allogf(dlog.Id(), "XIC.INFO", "", "Signal (%s) received, shutting down.", sig.String())
 	} else {
-		fmt.Fprintln(os.Stderr, "XIC: channel of signal closed, shutting down.")
+		dlog.Allog(dlog.Id(), "XIC.INFO", "", "Signal channel closed, shutting down.")
 	}
 	engine.Shutdown()
 	engine.WaitForShutdown()

@@ -17,6 +17,7 @@ import (
 	"io"
 
 	"halftwo/mangos/dlog"
+	"halftwo/mangos/xerr"
 	"halftwo/mangos/srp6a"
 )
 
@@ -800,7 +801,7 @@ again:
 			goto again
 		}
 	}
-	return err
+	return err	// DON'T xerr.Trace
 }
 
 func (con *_Connection) recv_msg(must bool) (msg _Message) {
@@ -819,6 +820,9 @@ func (con *_Connection) recv_msg(must bool) (msg _Message) {
 				con.close_and_reply(true)
 				return
 			}
+			err = xerr.Tracef(err, "Connection unexpectedly closed, con=%s", con.String())
+		} else {
+			err = xerr.Tracef(err, "Connection read error, con=%s", con.String())
 		}
 		con.set_error(err)
 		return
@@ -894,14 +898,16 @@ func (con *_Connection) send_msg(msg _OutMessage) error {
 
 	con.c.SetWriteDeadline(con._deadline())
 	_, err := con.c.Write(buf)
-	if err != nil {
-		return err
+	if err == nil {
+		if encrypted {
+			_, err = con.c.Write(mac[:])
+		}
 	}
 
-	if encrypted {
-		_, err = con.c.Write(mac[:])
+	if err != nil {
+		return xerr.Tracef(err, "Connection write error, con=%s", con.String())
 	}
-	return err
+	return nil
 }
 
 func (con *_Connection) sendMessage(msg _OutMessage) {
