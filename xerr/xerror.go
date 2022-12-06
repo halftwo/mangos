@@ -10,6 +10,7 @@ import (
 type XErr interface {
 	error
 	Cause() any
+	Is(target error) bool
 	Unwrap() error
 	PrintTrace(w io.Writer)
 }
@@ -42,12 +43,12 @@ func Errorf(format string, args ...any) XErr {
 
 // If cause == nil or not *_XErr, new a *_XErr
 func _traceOrNew(cause any, msg string) *_XErr {
-	err, ok := cause.(*_XErr)
+	xe, ok := cause.(*_XErr)
 	if !ok {
-		err = newXErr(cause)
+		xe = newXErr(cause)
 	}
-	err.trace_msg(2, msg)
-	return err
+	xe.trace_msg(2, msg)
+	return xe
 }
 
 type _XErr struct {
@@ -60,33 +61,37 @@ func newXErr(cause any) *_XErr {
 	return &_XErr{cause:cause}
 }
 
-func (err *_XErr) Error() string {
-	return fmt.Sprintf("%v", err)
+func (xe *_XErr) Error() string {
+	return fmt.Sprintf("%v", xe)
 }
 
-func (err *_XErr) Unwrap() error {
-	e, _ := err.cause.(error)
+func (xe *_XErr) Is(target error) bool {
+	return xe.cause == target
+}
+
+func (xe *_XErr) Unwrap() error {
+	e, _ := xe.cause.(error)
 	return e
 }
 
 // Return the "cause" of this error.
 // Cause could be used for error handling/switching,
 // or for holding general error/debug information.
-func (err *_XErr) Cause() any {
-	return err.cause
+func (xe *_XErr) Cause() any {
+	return xe.cause
 }
 
 // Add tracing information with msg.
 // Set n=0 unless wrapped with some function, then n > 0.
-func (err *_XErr) trace_msg(n int, msg string) {
-	if err.stacktrace == nil {
+func (xe *_XErr) trace_msg(n int, msg string) {
+	if xe.stacktrace == nil {
 		var pcs = make([]uintptr, 16)
 		n := runtime.Callers(n + 3, pcs)
-		err.stacktrace = pcs[:n]
+		xe.stacktrace = pcs[:n]
 	}
 
 	pc, _, _, _ := runtime.Caller(n + 1)
-	err.msgtrace = append(err.msgtrace, _TraceItem{pc:pc, msg:msg})
+	xe.msgtrace = append(xe.msgtrace, _TraceItem{pc:pc, msg:msg})
 }
 
 type _TraceItem struct {
@@ -98,9 +103,9 @@ type _TraceItem struct {
 // X means where the XErr object is first created (by xerr.Trace or xerr.Errorf)
 // T means the following xerr.Trace()'s that call on the XErr object
 // C means the call stacks to the X point
-func (err *_XErr) PrintTrace(w io.Writer) {
-	for i := len(err.msgtrace) - 1; i >= 0; i-- {
-		ti := &err.msgtrace[i]
+func (xe *_XErr) PrintTrace(w io.Writer) {
+	for i := len(xe.msgtrace) - 1; i >= 0; i-- {
+		ti := &xe.msgtrace[i]
 		if i > 0 {
 			w.Write([]byte(" T "))
 		} else {
@@ -112,8 +117,8 @@ func (err *_XErr) PrintTrace(w io.Writer) {
 		}
 		w.Write([]byte("\n"))
 	}
-	if len(err.stacktrace) > 0 {
-		for _, pc := range err.stacktrace {
+	if len(xe.stacktrace) > 0 {
+		for _, pc := range xe.stacktrace {
 			w.Write([]byte(" C "))
 			printLocus(w, pc)
 			w.Write([]byte("\n"))
@@ -121,29 +126,29 @@ func (err *_XErr) PrintTrace(w io.Writer) {
 	}
 }
 
-func (err *_XErr) Format(s fmt.State, verb rune) {
+func (xe *_XErr) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'p':
-		s.Write([]byte(fmt.Sprintf("%p", &err)))
+		s.Write([]byte(fmt.Sprintf("%p", &xe)))
 	default:
 		if s.Flag('#') {
 			s.Write([]byte("<XErr>\n"))
-			if err.cause != nil {
-				fmt.Fprintf(s, "Cause: %#v\n", err.cause)
+			if xe.cause != nil {
+				fmt.Fprintf(s, "Cause: %#v\n", xe.cause)
 			}
 			s.Write([]byte("Trace:\n"))
-			err.PrintTrace(s)
+			xe.PrintTrace(s)
 			s.Write([]byte("</XErr>\n"))
 		} else {
-			ti := &err.msgtrace[0]
+			ti := &xe.msgtrace[0]
 			s.Write([]byte("XErr "))
 			printLocus(s, ti.pc)
 			if len(ti.msg) > 0 {
 				fmt.Fprintf(s, ": %s", ti.msg)
 			}
-			if err.cause != nil {
+			if xe.cause != nil {
 				s.Write([]byte(" --- "))
-				fmt.Fprintf(s, "%v", err.cause)
+				fmt.Fprintf(s, "%v", xe.cause)
 			}
 		}
 	}
