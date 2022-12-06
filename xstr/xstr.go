@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func RightAlignedCopy(to []byte, from []byte) {
+func BytesRightCopy(to []byte, from []byte) {
 	k := len(to) - len(from)
 	if k > 0 {
                 for i := 0; i < k; k++ {
@@ -41,57 +41,38 @@ func Split2(s string, sep string) (left, right string) {
 	return
 }
 
-func IndexNotByte(s []byte, c byte) int {
-	for i, b := range s {
-		if b != c {
-			return i
-		}
+func SuffixIndexByteN(str string, c byte, n int) string {
+	if n <= 0 {
+		return ""
 	}
-	return -1
+
+	var k int
+	s := str
+	for i := 0; i < n; i++ {
+		k = strings.LastIndexByte(s, c)
+		if k < 0 {
+			return str
+		}
+		s = s[:k]
+	}
+	return str[k+1:]
 }
 
-func IndexNotInBytes(s []byte, set []byte) int {
-	if len(set) == 1 {
-		return IndexNotByte(s, set[0])
+func PrefixIndexByteN(str string, c byte, n int) string {
+	if n <= 0 {
+		return ""
 	}
 
-again:
-	for i, b := range s {
-		for _, c := range set {
-			if b == c {
-				continue again
-			}
+	m := 0
+	s := str
+	for i := 0; i < n; i++ {
+		k := strings.IndexByte(s, c)
+		if k < 0 {
+			return str
 		}
-		return i
+		m += k + 1
+		s = str[m:]
 	}
-	return -1
+	return str[:m-1]
 }
-
-func LastIndexNotByte(s []byte, c byte) int {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] != c {
-			return i
-		}
-	}
-	return -1
-}
-
-func LastIndexNotInBytes(s []byte, set []byte) int {
-	if len(set) == 1 {
-		return LastIndexNotByte(s, set[0])
-	}
-
-again:
-	for i := len(s) - 1; i >= 0; i-- {
-		b := s[i]
-		for _, c := range set {
-			if b == c {
-				continue again
-			}
-		}
-		return i
-	}
-	return -1
-}
-
 
