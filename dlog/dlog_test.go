@@ -15,9 +15,9 @@ func TestLogger(t *testing.T) {
 	SetOption(OPT_ALTERR|OPT_ALTOUT)
 	nw := NullWriter{}
 	SetAltWriter(nw)
-	Logf(ERROR, "%g", 12345.67890)
+	Log(ERROR, "%g", 12345.67890)
 	SetAltWriter(nil)
-	Logf(ERROR, "%g", 12345.67890)
+	Log(ERROR, "%g", 12345.67890)
 }
 
 func BenchmarkLog(b *testing.B) {
@@ -25,7 +25,7 @@ func BenchmarkLog(b *testing.B) {
 	SetAltWriter(nw)
 	SetOption(OPT_NONET|OPT_ALTOUT)
 	for i := 0; i < b.N; i++ {
-		Logf(ERROR, "%g", 12345.67890)
+		Log(ERROR, "%g", 12345.67890)
 	}
 }
 
@@ -51,3 +51,4 @@ func BenchmarkTimeBufferNoZone(b *testing.B) {
 		TimeBuffer(buf[:], t, false)
 	}
 }
+

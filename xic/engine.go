@@ -73,7 +73,7 @@ func newEngineSetting(setting Setting) *_Engine {
 	if shadow != "" {
 		engine.shadowBox, err = NewShadowBoxFromFile(shadow)
 		if err != nil {
-			dlog.Allogf(dlog.Id(), "XIC.WARN", "", "Failed to open shadow file %#v", shadow)
+			dlog.Allog(dlog.Id(), "XIC.WARN", "", "Failed to open shadow file %#v", shadow)
 		}
 	}
 
@@ -86,7 +86,7 @@ func newEngineSetting(setting Setting) *_Engine {
 	if secret != "" {
 		engine.secretBox, err = NewSecretBoxFromFile(secret)
 		if err != nil {
-			dlog.Allogf(dlog.Id(), "XIC.WARN", "", "Failed to open secret file %#v", secret)
+			dlog.Allog(dlog.Id(), "XIC.WARN", "", "Failed to open secret file %#v", secret)
 		}
 	}
 
@@ -244,7 +244,7 @@ func (engine *_Engine) WaitForShutdown() {
 func (engine *_Engine) sig_handler_routine(sigChan <-chan os.Signal) {
 	sig, ok := <-sigChan
 	if ok {
-		dlog.Allogf(dlog.Id(), "XIC.INFO", "", "Signal (%s) received, shutting down.", sig.String())
+		dlog.Allog(dlog.Id(), "XIC.INFO", "", "Signal (%s) received, shutting down.", sig.String())
 	} else {
 		dlog.Allog(dlog.Id(), "XIC.INFO", "", "Signal channel closed, shutting down.")
 	}

@@ -250,24 +250,14 @@ func getLocus(skip int) (locus string) {
 // Log send a dlog to dlogd. 
 // identity is from the logger's default.
 // locus is from runtime.Caller()
-func (lg *Logger) Log(tag Tag, a ...any) {
+func (lg *Logger) Log(tag Tag, format string, a ...any) {
 	var locus string
 	if lg == theLogger {
 		locus = getLocus(2)
 	} else {
 		locus = getLocus(1)
 	}
-	lg.Allog(lg.identity, tag, locus, a...)
-}
-
-func (lg *Logger) Logf(tag Tag, format string, a ...any) {
-	var locus string
-	if lg == theLogger {
-		locus = getLocus(2)
-	} else {
-		locus = getLocus(1)
-	}
-	lg.Allogf(lg.identity, tag, locus, format, a...)
+	lg.Allog(lg.identity, tag, locus, format, a...)
 }
 
 // NB: the rec content is destroyed in this function
@@ -286,17 +276,7 @@ func (lg *Logger) printAlt(rec *_RecordMan) {
 
 // Allog send a dlog to dlogd. 
 // identity and locus are also specified in the arguments.
-func (lg *Logger) Allog(identity string, tag Tag, locus string, a ...any) {
-	rec := recPool.Get().(*_RecordMan)
-	defer recPool.Put(rec)
-
-	rec.Reset()
-	rec.SetIdentityTagLocus(identity, tag, locus)
-	fmt.Fprint(rec, a...)
-	lg.dolog(rec)
-}
-
-func (lg *Logger) Allogf(identity string, tag Tag, locus string, format string, a ...any) {
+func (lg *Logger) Allog(identity string, tag Tag, locus string, format string, a ...any) {
 	rec := recPool.Get().(*_RecordMan)
 	defer recPool.Put(rec)
 
@@ -398,19 +378,11 @@ func SetAltWriter(w io.Writer) {
 	theLogger.SetAltWriter(w)
 }
 
-func Log(tag Tag, a ...any) {
-	theLogger.Log(tag, a...)
+func Log(tag Tag, format string, a ...any) {
+	theLogger.Log(tag, format, a...)
 }
 
-func Logf(tag Tag, format string, a ...any) {
-	theLogger.Logf(tag, format, a...)
-}
-
-func Allog(identity string, tag Tag, locus string, a ...any) {
-	theLogger.Allog(identity, tag, locus, a...)
-}
-
-func Allogf(identity string, tag Tag, locus string, format string, a ...any) {
-	theLogger.Allogf(identity, tag, locus, format, a...)
+func Allog(identity string, tag Tag, locus string, format string, a ...any) {
+	theLogger.Allog(identity, tag, locus, format, a...)
 }
 
