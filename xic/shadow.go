@@ -348,9 +348,9 @@ func (sb *ShadowBox) Dump(w io.Writer) {
 }
 
 func (sb *ShadowBox) GetContent() string {
-	b := &bytes.Buffer{}
-	sb.Dump(b)
-	return string(b.Bytes())
+	b := strings.Builder{}
+	sb.Dump(&b)
+	return b.String()
 }
 
 func (sb *ShadowBox) GetSrp6aParams(paramId string) *_Srp6a {

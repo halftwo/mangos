@@ -187,9 +187,9 @@ func (sb *SecretBox) Dump(w io.Writer) {
 }
 
 func (sb *SecretBox) GetContent() string {
-	b := &bytes.Buffer{}
-	sb.Dump(b)
-	return string(b.Bytes())
+	b := strings.Builder{}
+	sb.Dump(&b)
+	return b.String()
 }
 
 func (sb *SecretBox) Find(service, endpoint string) (identity, password string) {

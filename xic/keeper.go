@@ -1,11 +1,9 @@
 package xic
 
 import (
-	"fmt"
 	"reflect"
-	"io"
 	"sort"
-	"bytes"
+	"strings"
 
 	"halftwo/mangos/vbs"
 )
@@ -56,56 +54,54 @@ func (kp *_KeeperServant) Xic_services(cur Current, in _In_services, out *_Out_s
 	return nil
 }
 
-func type2rune(t reflect.Type) rune {
+func BuildTypeString(b *strings.Builder, t reflect.Type) {
 	if t == vbs.ReflectTypeOfDecimal64 {
-		return 'd'
+		b.WriteByte('d')
+		return
 	}
-	switch t.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return 'i'
-	case reflect.String:
-		return 's'
-	case reflect.Bool:
-		return 't'
-	case reflect.Float32, reflect.Float64:
-		return 'f'
-	case reflect.Array, reflect.Slice:
-		if t.Elem().Kind() == reflect.Uint8 {
-			return 'b'
-		}
-		return 'l'
-	case reflect.Map, reflect.Struct:
-		return 'm'
-	}
-	return 'x'
-}
 
-func type2str(t reflect.Type) string {
-	if t == vbs.ReflectTypeOfDecimal64 {
-		return "d"
-	}
 	switch t.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return "i"
+		b.WriteByte('i')
 	case reflect.String:
-		return "s"
+		b.WriteByte('s')
 	case reflect.Bool:
-		return "t"
+		b.WriteByte('t')
 	case reflect.Float32, reflect.Float64:
-		return "f"
+		b.WriteByte('f')
 	case reflect.Array, reflect.Slice:
 		if t.Elem().Kind() == reflect.Uint8 {
-			return "b"
+			b.WriteByte('b')
+		} else {
+			b.WriteByte('[')
+			BuildTypeString(b, t.Elem())
+			b.WriteByte(']')
 		}
-		return "[" + type2str(t.Elem()) + "]"
 	case reflect.Map:
-		return "{" + type2str(t.Key()) + ":" + type2str(t.Elem()) + "}"
+		b.WriteByte('{')
+		BuildTypeString(b, t.Key())
+		b.WriteByte(':')
+		BuildTypeString(b, t.Elem())
+		b.WriteByte('}')
 	case reflect.Struct:
-		return "{s:x}"
+		b.WriteByte('(')
+		fields := vbs.GetStructFieldInfos(t)
+		for i, f := range fields {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			if f.OmitEmpty {
+				b.WriteByte('?')
+			}
+			b.WriteString(f.Name)
+			b.WriteByte('/')
+			BuildTypeString(b, t.Field(f.Idx).Type)
+		}
+		b.WriteByte(')')
+	default:
+		b.WriteByte('x')
 	}
-	return "x"
 }
 
 /**
@@ -113,31 +109,20 @@ func type2str(t reflect.Type) string {
   () if empty struct
   (...) if map
 **/
-func printMethodArg(w io.Writer, t reflect.Type) {
+func printMethodArg(b *strings.Builder, t reflect.Type) {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	switch t.Kind() {
 	case reflect.Map:
-		fmt.Fprint(w, "(...)")
+		b.WriteString("(...)")
 	case reflect.Struct:
-		fmt.Fprint(w, "(")
-		fields := vbs.GetStructFieldInfos(t)
-		for i, f := range fields {
-			if i > 0 {
-				fmt.Fprint(w, ",")
-			}
-			if f.OmitEmpty {
-				fmt.Fprint(w, "?")
-			}
-			fmt.Fprintf(w, "%s/%s", f.Name, type2str(t.Field(f.Idx).Type))
-		}
-		fmt.Fprint(w, ")")
+		BuildTypeString(b, t)
 	}
 }
 
-func printMethodInfo(w io.Writer, mi *MethodInfo) {
-	fmt.Fprintf(w, "%s", mi.Name)
+func printMethodInfo(w *strings.Builder, mi *MethodInfo) {
+	w.WriteString(mi.Name)
 	printMethodArg(w, mi.InType)
 	if !mi.Oneway {
 		printMethodArg(w, mi.OutType)
@@ -150,11 +135,11 @@ func getServantMethods(si *ServantInfo) (methods []string) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	b := &bytes.Buffer{}
+	b := strings.Builder{}
 	for _, name := range names {
 		b.Reset()
-		printMethodInfo(b, si.Methods[name])
-		methods = append(methods, string(b.Bytes()))
+		printMethodInfo(&b, si.Methods[name])
+		methods = append(methods, b.String())
 	}
 	return
 }
