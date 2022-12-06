@@ -41,6 +41,14 @@ func Split2(s string, sep string) (left, right string) {
 	return
 }
 
+func SuffixIndexByte(str string, c byte) string {
+	k := strings.LastIndexByte(str, c)
+	if k < 0 {
+		return str
+	}
+	return str[k+1:]
+}
+
 func SuffixIndexByteN(str string, c byte, n int) string {
 	if n <= 0 {
 		return ""
@@ -56,6 +64,14 @@ func SuffixIndexByteN(str string, c byte, n int) string {
 		s = s[:k]
 	}
 	return str[k+1:]
+}
+
+func PrefixIndexByte(str string, c byte) string {
+	k := strings.IndexByte(str, c)
+	if k < 0 {
+		return str
+	}
+	return str[:k-1]
 }
 
 func PrefixIndexByteN(str string, c byte, n int) string {
