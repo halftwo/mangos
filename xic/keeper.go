@@ -81,6 +81,33 @@ func type2rune(t reflect.Type) rune {
 	return 'x'
 }
 
+func type2str(t reflect.Type) string {
+	if t == vbs.ReflectTypeOfDecimal64 {
+		return "d"
+	}
+	switch t.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return "i"
+	case reflect.String:
+		return "s"
+	case reflect.Bool:
+		return "t"
+	case reflect.Float32, reflect.Float64:
+		return "f"
+	case reflect.Array, reflect.Slice:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return "b"
+		}
+		return "[" + type2str(t.Elem()) + "]"
+	case reflect.Map:
+		return "{" + type2str(t.Key()) + ":" + type2str(t.Elem()) + "}"
+	case reflect.Struct:
+		return "{s:x}"
+	}
+	return "x"
+}
+
 /**
   (name1/type1,name2/type2,?name3/type3,...,nameN/typeN) if struct
   () if empty struct
@@ -103,7 +130,7 @@ func printMethodArg(w io.Writer, t reflect.Type) {
 			if f.OmitEmpty {
 				fmt.Fprint(w, "?")
 			}
-			fmt.Fprintf(w, "%s/%c", f.Name, type2rune(t.Field(f.Idx).Type))
+			fmt.Fprintf(w, "%s/%s", f.Name, type2str(t.Field(f.Idx).Type))
 		}
 		fmt.Fprint(w, ")")
 	}
