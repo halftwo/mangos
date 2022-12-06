@@ -182,14 +182,11 @@ type Logger struct {
 	mutex sync.Mutex
 }
 
-func NewLogger(identity string) *Logger {
-	id := identity
-	if identity == "" {
+func NewLogger(id string) *Logger {
+	if id == "" {
 		id = os.Args[0]
-		var i = strings.LastIndexByte(id, os.PathSeparator)
-		if i >= 0 {
-			id = id[i+1:]
-		}
+		i := strings.LastIndexByte(id, os.PathSeparator)
+		id = id[i+1:]
 	}
 
 	lg := &Logger{identity:id, altOut:os.Stderr}
@@ -221,7 +218,7 @@ func (lg *Logger) Option() int {
 	return int(atomic.LoadUint32(&lg.option))
 }
 
-func (lg *Logger) Identity() string {
+func (lg *Logger) Id() string {
 	lg.mutex.Lock()
 	id := lg.identity
 	lg.mutex.Unlock()
@@ -240,10 +237,11 @@ func (lg *Logger) SetAltWriter(w io.Writer) {
 func getLocus(skip int) (locus string) {
 	_, file, line, ok := runtime.Caller(skip + 1)
 	if ok {
-		i := strings.LastIndexByte(file, os.PathSeparator)
-		if i >= 0 {
-			file = file[i+1:]
+		k := strings.LastIndexByte(file, '/')
+		if k > 0 {
+			k = strings.LastIndexByte(file[:k], '/')
 		}
+		file := file[k+1:]
 		locus = file + ":" + strconv.Itoa(line)
 	}
 	return
@@ -392,8 +390,8 @@ func Option() int {
 	return theLogger.Option()
 }
 
-func Identity() string {
-	return theLogger.Identity()
+func Id() string {
+	return theLogger.Id()
 }
 
 func SetAltWriter(w io.Writer) {
