@@ -73,7 +73,7 @@ func newEngineSetting(setting Setting) *_Engine {
 	if shadow != "" {
 		engine.shadowBox, err = NewShadowBoxFromFile(shadow)
 		if err != nil {
-			dlog.Allogf(dlog.Id(), "XIC.WARN", "", "Failed to open shadow file %#s", shadow)
+			dlog.Allogf(dlog.Id(), "XIC.WARN", "", "Failed to open shadow file %#v", shadow)
 		}
 	}
 
@@ -86,7 +86,7 @@ func newEngineSetting(setting Setting) *_Engine {
 	if secret != "" {
 		engine.secretBox, err = NewSecretBoxFromFile(secret)
 		if err != nil {
-			dlog.Allogf(dlog.Id(), "XIC.WARN", "", "Failed to open secret file %#s", secret)
+			dlog.Allogf(dlog.Id(), "XIC.WARN", "", "Failed to open secret file %#v", secret)
 		}
 	}
 
@@ -145,7 +145,7 @@ func (engine *_Engine) CreateAdapterEndpoints(name string, endpoints string) (Ad
 		itemkey := name + ".Endpoints"
 		endpoints = engine.setting.Get(itemkey)
 		if endpoints == "" {
-			return nil, xerr.Errorf("%#s not given", itemkey)
+			return nil, xerr.Errorf("%#v not given", itemkey)
 		}
 	}
 
