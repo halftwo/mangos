@@ -23,9 +23,8 @@ const (
 )
 
 type _Engine struct {
-	setting Setting
-	name string
 	id string
+	setting Setting
 
 	maxQ int32
 	numQ atomic.Int32
@@ -52,13 +51,8 @@ type _Engine struct {
 var ErrEngineShutted = errors.New("Engine is shutting or shutted")
 
 func newEngineSetting(setting Setting) *_Engine {
-	return newEngineSettingName(setting, "")
-}
-
-func newEngineSettingName(setting Setting, name string) *_Engine {
 	engine := &_Engine{
 		setting: setting,
-		name: name,
 		id: GenerateRandomBase57Id(23),
 		maxQ: DEFAULT_ENGINE_MAXQ,
 		sigChan: make(chan os.Signal, 1),
@@ -113,10 +107,6 @@ func (engine *_Engine) SignalChannel() chan<- os.Signal {
 
 func (engine *_Engine) Setting() Setting {
 	return engine.setting
-}
-
-func (engine *_Engine) Name() string {
-	return engine.name
 }
 
 func (engine *_Engine) Id() string {

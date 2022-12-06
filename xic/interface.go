@@ -73,12 +73,14 @@ type Setting interface {
 
 
 type Engine interface {
-	Setting() Setting
-	Name() string
 	Id() string		// universal unique
+	Setting() Setting
 
+	// get the endpoints from setting
 	CreateAdapter(name string) (Adapter, error)
 	CreateAdapterEndpoints(name string, endpoints string) (Adapter, error)
+
+	// slack adapter has no endpoints
 	CreateSlackAdapter() (Adapter, error)
 
 	StringToProxy(proxy string) (Proxy, error)
@@ -183,8 +185,12 @@ type Proxy interface {
 }
 
 type Connection interface {
-	String() string
 	Id() string		// universal unique
+
+	// In the form "tcp/local/remote".
+	// For example, "tcp/192.168.0.1+1234/192.168.0.99+54321"
+	String() string
+
 	Close(force bool)
 	CreateFixedProxy(service string) (Proxy, error)
 

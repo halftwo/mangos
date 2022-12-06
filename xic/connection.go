@@ -36,11 +36,11 @@ const (
 )
 
 type _Connection struct {
+	id		string
 	c		net.Conn
 	state		_ConState
 	incoming        bool
 	closed		bool
-	id		string
 	engine          *_Engine
 	adapter         atomic.Value // Adapter
 	serviceHint     string
@@ -252,11 +252,19 @@ func (con *_Connection) CreateFixedProxy(service string) (Proxy, error) {
 	if strings.IndexByte(service, '@') >= 0 {
 		return nil, newEx(InvalidParameterException, "Service name can't contain '@'")
 	}
+
+	var err error
 	con.mutex.Lock()
-	if con.pending == nil {
+	if con.state > con_ACTIVE {
+		err = newException(ConnectionClosedException)
+	} else if con.pending == nil {
 		con.pending = make(map[int64]*_Result)
 	}
 	con.mutex.Unlock()
+
+	if err != nil {
+		return nil, err
+	}
 
 	prx := newProxyWithConnection(con.engine, service, con)
 	return prx, nil
