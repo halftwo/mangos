@@ -71,7 +71,7 @@ func PrefixIndexByte(str string, c byte) string {
 	if k < 0 {
 		return str
 	}
-	return str[:k-1]
+	return str[:k]
 }
 
 func PrefixIndexByteN(str string, c byte, n int) string {
