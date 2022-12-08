@@ -28,54 +28,53 @@ const (
 )
 
 const (
-	_RECORD_TYPE_RAW	= 0
-	_RECORD_VERSION		= 6
-
 	_RECORD_HEAD_SIZE	= 18
+
+	_RECORD_VERSION		= 6
 	_RECORD_BIG_ENDIAN	= 0x08
+
+	_RECORD_TRUNCATED	= 0x80
 )
 
 const DLOG_RECORD_SIZE		= 3984	// should be less than 3990
 
 // big endian byte order
-type _RecordHeadV6 struct {
+type _RecordHead struct {
 	size uint16	// include the size itself and trailing '\0' 
 	ttev byte	// truncated:1, type:3, bigendian:1, version:3
 	locusEnd uint8
 	pid  uint32
-	msec int64
-	port uint16
+	msec int64	// dlogd server will set this field
+	port uint16	// dlogd server will set this field
 }
 
-type _RecordMan struct {
-	pid uint32
-	ttev byte
-	identityEnd uint8
-	tagEnd uint8
-	locusEnd uint8
+type _Record struct {
 	off int
 	size uint16
+	ttev byte
+	locusEnd uint8
+	tagEnd uint8
+	identityEnd uint8
 	buf [DLOG_RECORD_SIZE]byte
 }
 
+var thePid = uint32(os.Getpid())
+
 var recPool = sync.Pool{
 	New: func() any {
-		pid := uint32(os.Getpid())
-		r := new(_RecordMan)
-		r.pid = pid
-		r.ttev = (_RECORD_TYPE_RAW << 4) | _RECORD_BIG_ENDIAN | (_RECORD_VERSION)
-		r.buf[4] = byte(pid >> 24)
-		r.buf[5] = byte(pid >> 16)
-		r.buf[6] = byte(pid >> 8)
-		r.buf[7] = byte(pid)
+		r := new(_Record)
+		r.buf[4] = byte(thePid >> 24)
+		r.buf[5] = byte(thePid >> 16)
+		r.buf[6] = byte(thePid >> 8)
+		r.buf[7] = byte(thePid)
 		return r
 	},
 }
 
-func (rec *_RecordMan) Reset() {
+func (rec *_Record) Reset() {
 	rec.off = _RECORD_HEAD_SIZE
-	rec.locusEnd = 0
 	rec.size = 0
+	rec.ttev = _RECORD_BIG_ENDIAN | _RECORD_VERSION
 }
 
 // Max length of identity, tag and locus strings
@@ -85,7 +84,7 @@ const (
 	LOCUS_MAX       = 127
 )
 
-func (rec *_RecordMan) SetIdentityTagLocus(identity string, tag Tag, locus string) {
+func (rec *_Record) SetIdentityTagLocus(identity string, tag Tag, locus string) {
 	rec.putMaxNoCheck(identity, IDENTITY_MAX)
 	rec.identityEnd = uint8(rec.off - _RECORD_HEAD_SIZE)
 	rec.writeByteNoCheck(' ')
@@ -97,12 +96,12 @@ func (rec *_RecordMan) SetIdentityTagLocus(identity string, tag Tag, locus strin
 	rec.writeByteNoCheck(' ')
 }
 
-func (rec *_RecordMan) writeByteNoCheck(b byte) {
+func (rec *_Record) writeByteNoCheck(b byte) {
 	rec.buf[rec.off] = b
 	rec.off++
 }
 
-func (rec *_RecordMan) putMaxNoCheck(s string, max int) {
+func (rec *_Record) putMaxNoCheck(s string, max int) {
 	k := len(s)
 	if k > max {
 		k = max
@@ -117,7 +116,7 @@ func (rec *_RecordMan) putMaxNoCheck(s string, max int) {
 	}
 }
 
-func (rec *_RecordMan) Write(buf []byte) (int, error) {
+func (rec *_Record) Write(buf []byte) (int, error) {
 	if rec.off < len(rec.buf) {
 		copy(rec.buf[rec.off:], buf)
 	}
@@ -126,7 +125,7 @@ func (rec *_RecordMan) Write(buf []byte) (int, error) {
 	return k, nil
 }
 
-func (rec *_RecordMan) Bytes() []byte {
+func (rec *_Record) Bytes() []byte {
 	if rec.size > 0 {
 		return rec.buf[:rec.size]
 	}
@@ -142,12 +141,10 @@ func (rec *_RecordMan) Bytes() []byte {
 		}
 	}
 
-	ttev := rec.ttev
 	if size < len(rec.buf) {
 		size++
 	} else {
-		// truncated
-		ttev |= 0x80
+		rec.ttev |= _RECORD_TRUNCATED
 		size = len(rec.buf)
 	}
 	rec.size = uint16(size)
@@ -155,19 +152,19 @@ func (rec *_RecordMan) Bytes() []byte {
 
 	rec.buf[0] = byte(size >> 8)
 	rec.buf[1] = byte(size)
-	rec.buf[2] = ttev
+	rec.buf[2] = rec.ttev
 	rec.buf[3] = rec.locusEnd
 	return rec.buf[:size]
 }
 
-func (rec *_RecordMan) BodyBytes() []byte {
+func (rec *_Record) BodyBytes() []byte {
 	if rec.size == 0 {
 		rec.Bytes()
 	}
 	return rec.buf[_RECORD_HEAD_SIZE:rec.size]
 }
 
-func (rec *_RecordMan) Truncated() bool {
+func (rec *_Record) Truncated() bool {
 	return rec.off >= len(rec.buf)
 }
 
@@ -250,7 +247,7 @@ func (lg *Logger) Log(tag Tag, format string, a ...any) {
 }
 
 // NB: the rec content is destroyed in this function
-func (lg *Logger) printAlt(rec *_RecordMan) {
+func (lg *Logger) printAlt(rec *_Record) {
 	var ts[18] byte
 	k := timeNoZone(ts[:], time.Now())
 	n := (_RECORD_HEAD_SIZE + int(rec.identityEnd)) - k
@@ -266,7 +263,7 @@ func (lg *Logger) printAlt(rec *_RecordMan) {
 // Allog send a dlog to dlogd. 
 // identity and locus are also specified in the arguments.
 func (lg *Logger) Allog(identity string, tag Tag, locus string, format string, a ...any) {
-	rec := recPool.Get().(*_RecordMan)
+	rec := recPool.Get().(*_Record)
 	defer recPool.Put(rec)
 
 	rec.Reset()
@@ -275,7 +272,7 @@ func (lg *Logger) Allog(identity string, tag Tag, locus string, format string, a
 	lg.dolog(rec)
 }
 
-func (lg *Logger) dolog(rec *_RecordMan) {
+func (lg *Logger) dolog(rec *_Record) {
 	fail := false
 	if lg.option & OPT_NONET == 0 {
 		var err error
