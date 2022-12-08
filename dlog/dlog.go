@@ -236,28 +236,15 @@ func (lg *Logger) SetAltWriter(w io.Writer) {
 	lg.mutex.Unlock()
 }
 
-func getLocus(skip int) (locus string) {
-	_, file, line, ok := runtime.Caller(skip + 1)
-	if ok {
-		k := strings.LastIndexByte(file, '/')
-		if k > 0 {
-			k = strings.LastIndexByte(file[:k], '/')
-		}
-		file := file[k+1:]
-		locus = file + ":" + strconv.Itoa(line)
-	}
-	return
-}
-
 // Log send a dlog to dlogd. 
 // identity is from the logger's default.
 // locus is from runtime.Caller()
 func (lg *Logger) Log(tag Tag, format string, a ...any) {
 	var locus string
 	if lg == theLogger {
-		locus = getLocus(2)
+		locus = GetFileLine(2)
 	} else {
-		locus = getLocus(1)
+		locus = GetFileLine(1)
 	}
 	lg.Allog(lg.identity, tag, locus, format, a...)
 }
@@ -388,6 +375,19 @@ func Log(tag Tag, format string, a ...any) {
 
 func Allog(identity string, tag Tag, locus string, format string, a ...any) {
 	theLogger.Allog(identity, tag, locus, format, a...)
+}
+
+
+func GetFileLine(stackSkip int) string {
+	_, file, line, ok := runtime.Caller(stackSkip + 1)
+	if !ok {
+		return ""
+	}
+	k := strings.LastIndexByte(file, '/')
+	if k > 0 {
+		k = strings.LastIndexByte(file[:k], '/')
+	}
+	return file[k+1:] + ":" + strconv.Itoa(line)
 }
 
 func LogPanic() {
