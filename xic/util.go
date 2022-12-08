@@ -1,14 +1,12 @@
 package xic
 
 import (
-	"os"
 	"math/rand"
 	crand "crypto/rand"
 	"encoding/hex"
 	"encoding/binary"
 	"sync"
 	"halftwo/mangos/xbase57"
-	"halftwo/mangos/dlog"
 )
 
 var once sync.Once
@@ -43,12 +41,5 @@ func GenerateRandomUuid() string {
 
 func GenerateRandomBase57Id(n int) string {
 	return xbase57.RandomId(n, crand.Read)
-}
-
-func logpanic() {
-	if x := recover(); x != nil {
-		dlog.Log("PANIC", "%#v", x)
-		os.Exit(1)
-	}
 }
 

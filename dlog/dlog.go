@@ -390,3 +390,10 @@ func Allog(identity string, tag Tag, locus string, format string, a ...any) {
 	theLogger.Allog(identity, tag, locus, format, a...)
 }
 
+func LogPanic() {
+	if x := recover(); x != nil {
+		Log("PANIC", "%#v", x)
+		os.Exit(1)
+	}
+}
+

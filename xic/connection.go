@@ -1021,7 +1021,7 @@ func (con *_Connection) check_doable(quest *_InQuest) bool {
 }
 
 func (con *_Connection) process_loop() {
-	defer logpanic()
+	defer dlog.LogPanic()
 	con.set_state(con_ACTIVE)
 	go con.send_loop()
 
