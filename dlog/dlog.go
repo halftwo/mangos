@@ -173,11 +173,13 @@ func (rec *_RecordMan) Truncated() bool {
 
 var theLogger = NewLogger("")
 
+
 type Logger struct {
 	option uint32
-	identity string
+	connected atomic.Uint32
 	con atomic.Value	// net.Conn
 	lastFailTime time.Time
+	identity string
 	altOut io.Writer
 	mutex sync.Mutex
 }
@@ -287,47 +289,43 @@ func (lg *Logger) Allog(identity string, tag Tag, locus string, format string, a
 }
 
 func (lg *Logger) dolog(rec *_RecordMan) {
-	var do_alt bool
+	fail := false
 	if lg.option & OPT_NONET == 0 {
 		var err error
-		con, ok := lg.con.Load().(net.Conn)
-		if !ok {
-			con = lg.dial()
-			if con == nil {
-				if lg.option & OPT_ALTERR != 0 {
-					do_alt = true
-					goto net_done
-				}
-			}
+		con := lg.getConn()
+		if con == nil {
+			fail = true
+			goto net_done
 		}
 
 		buf := rec.Bytes()
 		_, err = con.Write(buf)
 		if err != nil {
+			fail = true
 			lg.shut(con)
-			if lg.option & OPT_ALTERR != 0 {
-				do_alt = true
-			}
 		}
 	}
 
-	if lg.option & OPT_ALTOUT != 0 {
-		do_alt = true
-	}
-
 net_done:
-	if do_alt {
+	if (lg.option & OPT_ALTOUT != 0) || (fail && lg.option & OPT_ALTERR != 0) {
 		lg.printAlt(rec)
 	}
+}
+
+func (lg *Logger) getConn() net.Conn {
+	if lg.connected.Load() == 1 {
+		return lg.con.Load().(net.Conn)
+	}
+
+	return lg.dial()
 }
 
 func (lg *Logger) dial() net.Conn {
 	lg.mutex.Lock()
 	defer lg.mutex.Unlock()
 
-	c := lg.con.Load()
-	if c != nil {
-		return c.(net.Conn)
+	if lg.connected.Load() == 1 {
+		return lg.con.Load().(net.Conn)
 	}
 
 	if time.Since(lg.lastFailTime) < time.Second {
@@ -347,18 +345,24 @@ func (lg *Logger) dial() net.Conn {
 		return nil
 	}
 	lg.con.Store(con)
+	lg.connected.Store(1)
 	return con
 }
 
 func (lg *Logger) shut(con net.Conn) {
-	con.Close()
-
-	lg.mutex.Lock()
-	defer lg.mutex.Unlock()
-
-	c := lg.con.Load()
-	if c == con {
-		lg.con.Store(nil)
+	doit := false
+	if lg.connected.Load() == 1 {
+		lg.mutex.Lock()
+		if lg.connected.Load() == 1 {
+			if lg.con.Load() == con {
+				lg.connected.Store(0)
+				doit = true
+			}
+		}
+		lg.mutex.Unlock()
+	}
+	if doit {
+		con.Close()
 	}
 }
 

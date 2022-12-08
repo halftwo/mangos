@@ -12,7 +12,7 @@ func (NullWriter) Write(data []byte) (int, error) {
 }
 
 func TestLogger(t *testing.T) {
-	SetOption(OPT_ALTERR|OPT_ALTOUT)
+	SetOption(OPT_ALTERR|OPT_ALTOUT|OPT_TCP)
 	nw := NullWriter{}
 	SetAltWriter(nw)
 	Log(ERROR, "%g", 12345.67890)
