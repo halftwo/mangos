@@ -12,7 +12,7 @@ import (
 	"halftwo/mangos/xerr"
 )
 
-const ENGINE_VERSION = "Go.221209.22120915"
+const ENGINE_VERSION = "Go.221209.22120919"
 
 const DEFAULT_ENGINE_MAXQ = 10000
 
@@ -152,21 +152,23 @@ func (engine *_Engine) Throb(fn func()string) {
 	})
 }
 
-func duration2nextMinute(t time.Time) time.Duration {
-	_, _, sec := t.Clock()
-	// duration to next minute and 0.2 second
-	return time.Second * time.Duration(60 - sec) + 200_000_000 - time.Duration(t.Nanosecond())
+func sleepDuration(now time.Time) time.Duration {
+	// wake up at every minute and 0.4 second, i.e.
+	// at 00:00.4, 01:00.4, 02:00.4, 03:00.4, ...
+	// in case the clock is not acurate enough
+	_, _, sec := now.Clock()
+	return time.Second * time.Duration(60 - sec) + 400_000_000 - time.Duration(now.Nanosecond())
 }
 
 func (engine *_Engine) throb_routine() {
 	now := time.Now()
-	engine.ticker = time.NewTicker(duration2nextMinute(now))
+	engine.ticker = time.NewTicker(sleepDuration(now))
 	for {
 		select {
 		case <-engine.doneChan:
 			goto done
 		case t := <-engine.ticker.C:
-			engine.ticker.Reset(duration2nextMinute(t))
+			engine.ticker.Reset(sleepDuration(t))
 			fn := engine.throbFunc.Load()
 			if fn == nil {
 				dlog.Allog(dlog.Id(), "THROB", ENGINE_VERSION, "id=%s start=%s", engine.id, engine.startTS)
