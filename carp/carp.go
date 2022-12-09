@@ -16,7 +16,7 @@ import (
 )
 
 
-type CombineFunction func(member uint64, key uint32) uint32
+type CombineFunc func(member uint64, key uint32) uint32
 
 type Carp interface {
 	Count() int
@@ -32,12 +32,12 @@ type _Item struct {
 
 type _Carp struct {
 	weighted bool
-	combine CombineFunction
+	combine CombineFunc
 	items []_Item
 }
 
 
-func newCarp(members []uint64, combine CombineFunction) *_Carp {
+func newCarp(members []uint64, combine CombineFunc) *_Carp {
 	if len(members) == 0 {
 		panic("Slice members can't have length 0")
 	}
@@ -54,13 +54,13 @@ func newCarp(members []uint64, combine CombineFunction) *_Carp {
 }
 
 // NewCarp return a new Carp. If the combine function is nil, the default is used.
-func NewCarp(members []uint64, combine CombineFunction) Carp {
+func NewCarp(members []uint64, combine CombineFunc) Carp {
 	return newCarp(members, combine)
 }
 
 // NewCarp return a new Carp with weighted members.
 // If the combine function is nil, the default is used.
-func NewCarpWeight(members []uint64, weights []uint32, combine CombineFunction) Carp {
+func NewCarpWeight(members []uint64, weights []uint32, combine CombineFunc) Carp {
 	cp := newCarp(members, combine)
 
 	sum := 0.0

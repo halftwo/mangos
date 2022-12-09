@@ -57,6 +57,9 @@ func (srv *_DemoServant) Xic_time(cur xic.Current, in _TimeInArgs, out *_TimeOut
 	return nil
 }
 
+func throb() string {
+	return "this is demosrv"
+}
 
 func starter(engine xic.Engine, args []string) error {
 	adapter, err := engine.CreateAdapter("")
@@ -64,6 +67,7 @@ func starter(engine xic.Engine, args []string) error {
 		return err
 	}
 
+	engine.Throb(throb)
 	servant := newServant(adapter)
 	adapter.MustAddServant("Demo", servant)
 	adapter.Activate()

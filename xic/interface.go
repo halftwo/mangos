@@ -6,13 +6,13 @@ import (
 )
 
 /*
-   Server EntreeFunction procedure:
+   Server EntreeFunc procedure:
   	Engine.CreateAdapter
 	Adapter.AddServant
 	...
 	Adapter.Activate
 */
-type EntreeFunction func(engine Engine, args []string) error
+type EntreeFunc func(engine Engine, args []string) error
 
 /*
    Normal SignalHandler procedure:
@@ -24,7 +24,7 @@ type EntreeFunction func(engine Engine, args []string) error
 type SignalHandler func(sigChan <-chan os.Signal)
 
 
-func Run(entree EntreeFunction) error {
+func Run(entree EntreeFunc) error {
 	engine, err := Start(entree)
 	if err != nil {
 		return err
@@ -33,15 +33,15 @@ func Run(entree EntreeFunction) error {
 	return nil
 }
 
-func Start(entree EntreeFunction) (Engine, error) {
+func Start(entree EntreeFunc) (Engine, error) {
 	return start_setting_signal(entree, nil, nil)
 }
 
-func StartSetting(entree EntreeFunction, setting Setting) (Engine, error) {
+func StartSetting(entree EntreeFunc, setting Setting) (Engine, error) {
 	return start_setting_signal(entree, setting, nil)
 }
 
-func StartSettingSignal(entree EntreeFunction, setting Setting, sigFun SignalHandler) (Engine, error) {
+func StartSettingSignal(entree EntreeFunc, setting Setting, sigFun SignalHandler) (Engine, error) {
 	return start_setting_signal(entree, setting, sigFun)
 }
 
@@ -75,6 +75,8 @@ type Setting interface {
 type Engine interface {
 	Id() string		// universal unique
 	Setting() Setting
+
+	Throb(func()string)	// dlog every minute
 
 	// get the endpoints from setting
 	CreateAdapter(name string) (Adapter, error)

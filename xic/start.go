@@ -56,7 +56,7 @@ func usage() {
 }
 
 var started atomic.Int32
-func start_setting_signal(entree EntreeFunction, setting Setting, sigFun SignalHandler) (Engine, error) {
+func start_setting_signal(entree EntreeFunc, setting Setting, sigFun SignalHandler) (Engine, error) {
 	if !started.CompareAndSwap(0, 1) {
 		panic("function start_with_setting() can only be called once")
 	}

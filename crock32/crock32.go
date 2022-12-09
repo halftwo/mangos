@@ -294,10 +294,10 @@ func DammValidate(in []byte) bool {
 	return DammChecksum(in) == 0
 }
 
-type RandomSourceFunction func ([]byte)(int, error)
+type RandomSourceFunc func ([]byte)(int, error)
 
 // The first char of the returned string is always a letter instead of digit
-func RandomId(n int, rnd RandomSourceFunction) string {
+func RandomId(n int, rnd RandomSourceFunc) string {
         if n < 1 {
                 panic("length of id must be greater than 1")
         }

@@ -1,16 +1,18 @@
 package xic
 
 import (
-	"sync"
 	"os"
 	"math"
 	"time"
 	"errors"
+	"sync"
 	"sync/atomic"
 
 	"halftwo/mangos/dlog"
 	"halftwo/mangos/xerr"
 )
+
+const ENGINE_VERSION = "Go.221209.22120915"
 
 const DEFAULT_ENGINE_MAXQ = 10000
 
@@ -42,7 +44,12 @@ type _Engine struct {
 
 	sigChan chan os.Signal
 
-	once sync.Once
+	startTS string
+	doneChan chan struct{}
+	once sync.Once		// for throb_routine
+	throbFunc atomic.Value	// func()string
+	ticker *time.Ticker
+
 	state int
 	mutex sync.Mutex
 	cond sync.Cond
@@ -56,6 +63,8 @@ func newEngineSetting(setting Setting) *_Engine {
 		id: GenerateRandomBase57Id(23),
 		maxQ: DEFAULT_ENGINE_MAXQ,
 		sigChan: make(chan os.Signal, 1),
+		doneChan: make(chan struct{}),
+		startTS: dlog.TimeString(time.Now()),
 	}
 	engine.cond.L = &engine.mutex
 
@@ -131,6 +140,45 @@ func (engine *_Engine) SetSecretBox(sb *SecretBox) {
 
 func (engine *_Engine) SetShadowBox(sb *ShadowBox) {
 	engine.shadowBox = sb
+}
+
+func (engine *_Engine) Throb(fn func()string) {
+	if fn != nil {
+		engine.throbFunc.Store(fn)
+	}
+	engine.once.Do(func() {
+		dlog.Allog(dlog.Id(), "DEBUT", ENGINE_VERSION, "id=%s start=%s", engine.id, engine.startTS)
+		go engine.throb_routine()
+	})
+}
+
+func duration2nextMinute(t time.Time) time.Duration {
+	_, _, sec := t.Clock()
+	return time.Second * time.Duration(60 - sec) - time.Duration(t.Nanosecond())
+}
+
+func (engine *_Engine) throb_routine() {
+	now := time.Now()
+	engine.ticker = time.NewTicker(duration2nextMinute(now))
+	for {
+		select {
+		case <-engine.doneChan:
+			goto done
+		case t := <-engine.ticker.C:
+			engine.ticker.Reset(duration2nextMinute(t))
+			fn := engine.throbFunc.Load()
+			if fn == nil {
+				dlog.Allog(dlog.Id(), "THROB", ENGINE_VERSION, "id=%s start=%s", engine.id, engine.startTS)
+				continue
+			}
+
+			s := fn.(func()string)()
+			if s != "" {
+				dlog.Allog(dlog.Id(), "THROB", ENGINE_VERSION, "id=%s start=%s %s", engine.id, engine.startTS, s)
+			}
+		}
+	}
+done:
 }
 
 func (engine *_Engine) CreateAdapter(name string) (Adapter, error) {
@@ -282,6 +330,8 @@ func (engine *_Engine) wait_for_shutting_routine() {
 
 	// TODO: wait for connections closed
 	time.Sleep(time.Millisecond)	// XXX
+
+	close(engine.doneChan)
 
 	engine.mutex.Lock()
 	engine.state = eng_SHUTTED
