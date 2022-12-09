@@ -11,6 +11,12 @@ import (
 	Adapter.AddServant
 	...
 	Adapter.Activate
+
+   Client EntreeFunc procedure:
+	Engine.StringToProxy
+	Proxy.Invoke
+	...
+	Engine.Shutdown // or call this in some other place
 */
 type EntreeFunc func(engine Engine, args []string) error
 
