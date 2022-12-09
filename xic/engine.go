@@ -154,7 +154,8 @@ func (engine *_Engine) Throb(fn func()string) {
 
 func duration2nextMinute(t time.Time) time.Duration {
 	_, _, sec := t.Clock()
-	return time.Second * time.Duration(60 - sec) - time.Duration(t.Nanosecond())
+	// duration to next minute and 0.2 second
+	return time.Second * time.Duration(60 - sec) + 200_000_000 - time.Duration(t.Nanosecond())
 }
 
 func (engine *_Engine) throb_routine() {
