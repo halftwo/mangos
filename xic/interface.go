@@ -6,17 +6,26 @@ import (
 )
 
 /*
-   Server EntreeFunc procedure:
-  	Engine.CreateAdapter
-	Adapter.AddServant
-	...
-	Adapter.Activate
+   To gracefully stop the engine, Engine.WaitForShutdown() shoud be called
+   and be waited somewhere in either server or client.
+   After Engine.Shutdown() be called, and some housekeeping finished,
+   Engine.WaitForShutdown() returned.
 
-   Client EntreeFunc procedure:
-	Engine.StringToProxy
-	Proxy.Invoke
-	...
-	Engine.Shutdown // or call this in some other place
+   A typical server EntreeFunc procedure does something like:
+		Engine.CreateAdapter
+		Adapter.AddServant
+		...
+		Adapter.Activate
+   And then Engine.WaitForShutdown() at some other place.
+
+   A typical client client EntreeFunc does nothing (except save the engine variable)
+   or does all the real works:
+		Engine.StringToProxy
+		Proxy.Invoke
+		...
+		Engine.Shutdown // or call this at some other place
+   If the client does nothing in the EntreeFunc, then it does the real works at some
+   other place.
 */
 type EntreeFunc func(engine Engine, args []string) error
 
